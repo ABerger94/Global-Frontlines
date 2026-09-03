@@ -183,7 +183,13 @@ export class Tank implements Combatant {
     this.turret.rotation.y = this.turretYaw - this.yaw;
     // camera
     const back = new THREE.Vector3(Math.sin(camPitchRef.yaw), 0, Math.cos(camPitchRef.yaw));
+    const anchor = this.pos.clone().add(new THREE.Vector3(0, 2.6, 0));
     const camPos = this.pos.clone().add(back.multiplyScalar(11)).add(new THREE.Vector3(0, 5 + camPitchRef.pitch * 6, 0));
+    // pull the camera in if a building or the terrain is in the way
+    const toCam = camPos.clone().sub(anchor);
+    const wantDist = toCam.length();
+    const hit = this.world.field.raycast(anchor, toCam.clone().normalize(), wantDist);
+    if (hit < wantDist) camPos.copy(anchor).addScaledVector(toCam.normalize(), Math.max(2.5, hit - 0.8));
     const gy = this.world.field.heightAt(camPos.x, camPos.z) + 1.2;
     if (camPos.y < gy) camPos.y = gy;
     camera.position.lerp(camPos, Math.min(1, dt * 8));

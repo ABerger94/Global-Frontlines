@@ -351,6 +351,17 @@ export class BattleScene {
     const armor = team === 'player' ? 1 + (this.setup.supply.tank ? 0.3 : 0) : 1;
     const pos = this.spawnPoint(team);
     pos.x = clamp(pos.x, -60, 60);
+    // find open ground: no colliders within 6 m
+    for (let k = 0; k < 30; k++) {
+      const cand = pos.clone().add(new THREE.Vector3((this.rng.next() - 0.5) * 50 * (k / 10 + 1), 0, (this.rng.next() - 0.5) * 30));
+      cand.x = clamp(cand.x, -HALF + 10, HALF - 10);
+      cand.z = clamp(cand.z, -HALF + 10, HALF - 10);
+      const y = this.field.heightAt(cand.x, cand.z);
+      if (!this.field.insideCollider(cand.x, y + 1, cand.z, 6)) {
+        pos.copy(cand);
+        break;
+      }
+    }
     const t = new Tank(this.world, team, pos, this.styleFor[team].uniform, armor, n.tankName, this.support);
     t.yaw = team === 'player' ? (this.setup.playerIsAttacker ? Math.PI : 0) : this.setup.playerIsAttacker ? 0 : Math.PI;
     t.turretYaw = t.yaw;
@@ -695,6 +706,7 @@ export class BattleScene {
       this.commander.update(dt, this.aspect());
       this.player.update(dt, now);
     } else if (this.mode === 'tank' && this.playerTank) {
+      this.player.viewRoot.visible = false;
       this.playerTank.controlUpdate(dt, input, this.camera, this.tankCam);
       this.player.pos.copy(this.playerTank.pos);
       if (input.mousePressed(0) && !input.locked) input.requestLock();
@@ -702,6 +714,7 @@ export class BattleScene {
       if (input.mousePressed(0) && !input.locked && this.player.alive) input.requestLock();
       this.player.update(dt, now);
     }
+    if (this.mode === 'commander') this.player.viewRoot.visible = false;
     // support keys
     if (this.mode !== 'commander' && this.player.alive) {
       if (input.pressed('Digit5')) this.callArtillery(this.player.aimPoint(320));
