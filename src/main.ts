@@ -40,7 +40,7 @@ class App {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.menu = new Menu(this.ui, (era, nation) => this.startCampaign(era, nation));
-    this.buildMenuGlobe();
+    setTimeout(() => this.buildMenuGlobe(), 30);
     window.addEventListener('resize', () => this.resize());
     this.canvas.addEventListener('mousedown', (e) => (this.mouseDown = { x: e.clientX, y: e.clientY }));
     this.canvas.addEventListener('mouseup', (e) => {
@@ -73,10 +73,11 @@ class App {
   }
 
   private buildMenuGlobe() {
+    if (this.screen !== 'menu') return;
     const sim = new StrategySim(ERAS[1], 'usa', 1942);
     this.menuGlobe = new GlobeScene(this.renderer, sim.world, sim, this.labels);
     this.menuGlobe.autoRotate = true;
-    this.menuGlobe.camera.position.set(0.6, 0.7, 2.9);
+    this.menuGlobe.camera.position.set(-0.4, 1.1, 2.6);
     this.menuGlobe.controls.enabled = false;
     this.menuGlobe.resize(window.innerWidth, window.innerHeight);
   }

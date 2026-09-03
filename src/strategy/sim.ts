@@ -2,6 +2,7 @@ import { Emitter } from '../core/events';
 import { RNG } from '../core/rng';
 import { clamp } from '../core/math';
 import type { EraDef, NationDef, TechDef, TechEffects, KitId } from '../data/types';
+import type { EventAction } from '../data/history';
 import { generateWorld, findPath, TERRAIN_INFO, type World, type Province } from './world';
 
 export interface NationState {
@@ -117,7 +118,7 @@ export class StrategySim {
     this.rng = new RNG(seed ^ 0xabcdef);
     this.world = generateWorld(era, seed);
     this.date = new Date(Date.UTC(era.startYear, era.startMonth - 1, 1));
-    for (const n of era.nations) {
+    for (const n of [...era.nations, ...era.politics.aiNations]) {
       const st: NationState = {
         id: n.id,
         def: n,
@@ -125,7 +126,7 @@ export class StrategySim {
         oil: 120,
         munitions: 250,
         equipment: 200,
-        manpower: Math.round(40000 * n.manpower),
+        manpower: Math.round(30000 * n.manpower),
         research: 0,
         pp: 40,
         stability: n.id === 'russia' && era.id === 'ww1' ? 45 : 65,
@@ -174,8 +175,12 @@ export class StrategySim {
     // starting armies
     for (const n of this.nations.values()) {
       const owned = this.provincesOf(n.id);
-      const count = Math.max(2, Math.round(owned.length / 3));
-      const cap = owned.find((p) => p.capitalOf === n.id)!;
+      if (!owned.length) {
+        n.alive = false;
+        continue;
+      }
+      const count = n.def.armies ?? clamp(Math.round(Math.sqrt(owned.length) * 1.1 * (0.6 + 0.4 * n.def.manpower)), 1, 6);
+      const cap = owned.find((p) => p.capitalOf === n.id) ?? owned[0];
       const borderProvs = owned.filter((p) => p.neighbors.some((nb) => this.world.provinces[nb].isLand && this.world.provinces[nb].owner !== n.id));
       for (let i = 0; i < count; i++) {
         const prov = i === 0 ? cap : borderProvs.length ? this.rng.pick(borderProvs) : this.rng.pick(owned);
@@ -396,18 +401,7 @@ export class StrategySim {
     if (a.pp < 50) return false;
     a.pp -= 50;
     a.stability -= 8;
-    const sideA = [fromId, ...a.allies].filter((id) => this.nations.get(id)?.alive);
-    const sideB = [toId, ...b.allies].filter((id) => this.nations.get(id)?.alive);
-    for (const x of sideA)
-      for (const y of sideB) {
-        if (x === y) continue;
-        const nx = this.nations.get(x)!;
-        const ny = this.nations.get(y)!;
-        nx.wars.add(y);
-        ny.wars.add(x);
-        nx.relations.set(y, -100);
-        ny.relations.set(x, -100);
-      }
+    this.forceWar(fromId, toId);
     this.log(`${a.def.name} declares war on ${b.def.name}!`, 'war');
     this.events.emit('dirty');
     return true;
@@ -472,6 +466,7 @@ export class StrategySim {
       if (p.garrison < base) p.garrison = Math.min(base, p.garrison + 60);
     }
     for (const a of [...this.armies.values()]) this.moveTick(a);
+    this.fireEvents();
     for (const n of this.nations.values()) {
       if (!n.alive || n.id === this.playerId) continue;
       if (this.day >= n.nextAiDay) {
@@ -496,12 +491,12 @@ export class StrategySim {
       pop += p.population;
       research += (p.terrain === 'urban' ? 3 : 0.6) + p.factories * 0.4;
     }
-    const output = factories * 4.2 * n.def.industry;
+    const output = Math.pow(factories, 0.82) * 4.6 * n.def.industry;
     n.munitions += output * n.production.munitions * (1 + e.munitions);
     n.equipment += output * n.production.equipment;
     n.steel += output * n.production.steel * (1 + e.steel);
     n.oil += oil * 1.5 + 0.6;
-    n.manpower += pop * 0.00028 * n.def.manpower * (1 + e.manpower) * 1000 / 1000;
+    n.manpower += pop * 0.02 * n.def.manpower * (1 + e.manpower);
     n.research += research * (1 + e.research);
     n.pp = Math.min(200, n.pp + 1);
     // research progress
@@ -604,6 +599,7 @@ export class StrategySim {
   }
   private startBattle(attackerArmy: Army, p: Province) {
     const attacker = attackerArmy.nation;
+    const atkN = this.nations.get(attacker)!;
     const defender = p.owner!;
     const defArmies = this.armiesIn(p.id).filter((x) => x.nation === defender || this.isAllied(defender, x.nation));
     const atkArmies = this.armiesIn(p.id).filter((x) => x.nation === attacker || this.isAllied(attacker, x.nation));
@@ -636,8 +632,8 @@ export class StrategySim {
       defenderMen: defMen,
     };
     const playerInvolved = attacker === this.playerId || defender === this.playerId;
-    if (p.owner === 'minor' && attacker === this.playerId) this.player.stability -= 3;
-    if (playerInvolved) {
+    if (p.owner === 'minor') atkN.stability = clamp(atkN.stability - 3, 0, 100);
+    if (playerInvolved && !this.activeBattle && !this.pendingBattle) {
       this.pendingBattle = ctx;
       this.events.emit('battlePrompt', ctx);
     } else {
@@ -713,7 +709,7 @@ export class StrategySim {
       for (const a of defArmies) this.retreat(a, p.id);
       const who = defN ? defN.def.name : 'neutral forces';
       this.log(`${atkN.def.name} captures ${p.name} from ${who}${out.fought ? ' after a hard-fought battle' : ''}.`, playerSide ? (playerWon ? 'good' : 'bad') : 'war');
-      if (prevOwner && p.capitalOf === prevOwner && defN) this.capitulate(defN, atkN);
+      if (prevOwner && p.capitalOf === prevOwner && defN) this.capitalLost(defN, atkN, p);
     } else {
       for (const a of atkArmies) this.retreat(a, p.id);
       if (defN) defN.stability = clamp(defN.stability + 1.5, 0, 100);
@@ -744,6 +740,21 @@ export class StrategySim {
     a.province = dest;
     a.prevProvince = dest;
     a.path = [];
+  }
+  private capitalLost(n: NationState, victor: NationState, cap: Province) {
+    const remaining = this.provincesOf(n.id);
+    const original = this.world.provinces.filter((q) => q.originalOwner === n.id).length;
+    if (remaining.length < 3 || remaining.length < original * 0.4) {
+      this.capitulate(n, victor);
+      return;
+    }
+    remaining.sort((a, b) => b.population + b.factories * 500 - (a.population + a.factories * 500));
+    const next = remaining[0];
+    cap.capitalOf = null;
+    next.capitalOf = n.id;
+    next.fort = Math.max(next.fort, 1);
+    n.stability = clamp(n.stability - 15, 0, 100);
+    this.log(`${cap.name} has fallen! The ${n.def.adjective} government relocates to ${next.name}.`, n.id === this.playerId ? 'bad' : 'war');
   }
   private capitulate(n: NationState, victor: NationState) {
     n.alive = false;
@@ -779,7 +790,7 @@ export class StrategySim {
     if (this.gameOver) return;
     const p = this.player;
     if (!p.alive) return;
-    const rivals = [...this.nations.values()].filter((n) => n.id !== p.id && !p.allies.has(n.id));
+    const rivals = [...this.nations.values()].filter((n) => n.id !== p.id && n.def.playable !== false && !p.allies.has(n.id));
     if (rivals.length && rivals.every((n) => !n.alive)) {
       this.endGame(true, 'Every rival power has capitulated. The world is yours.');
       return;
@@ -791,6 +802,75 @@ export class StrategySim {
   private endGame(won: boolean, reason: string) {
     this.gameOver = true;
     this.events.emit('gameOver', won, reason);
+  }
+
+  // ---------------------------------------------------------------- historical events
+  private firedEvents = new Set<string>();
+  private fireEvents() {
+    const today = this.date.toISOString().slice(0, 10);
+    for (const ev of this.era.politics.events) {
+      if (this.firedEvents.has(ev.date + ev.title) || ev.date > today) continue;
+      this.firedEvents.add(ev.date + ev.title);
+      let applied = false;
+      for (const act of ev.actions) applied = this.applyEvent(act) || applied;
+      if (applied) this.log(`${ev.title}: ${ev.text}`, 'war');
+      else if (ev.actions.some((a) => ('n' in a ? a.n : a.a) === this.playerId)) this.log(`Historical note — ${ev.title}: ${ev.text} (Your government decides its own course.)`, 'info');
+    }
+  }
+  private applyEvent(act: EventAction): boolean {
+    const get = (id: string) => this.nations.get(id);
+    if (act.type === 'stability') {
+      const n = get(act.n);
+      if (!n || !n.alive || n.id === this.playerId) return false;
+      n.stability = clamp(n.stability + act.delta, 0, 100);
+      if (n.stability <= 0) this.collapse(n);
+      return true;
+    }
+    const a = get(act.a);
+    const b = get(act.b);
+    if (!a || !b || !a.alive || !b.alive) return false;
+    if (a.id === this.playerId) return false; // the player's own decisions are never scripted
+    if (act.type === 'war') {
+      if (a.wars.has(b.id) || a.allies.has(b.id)) return false;
+      this.forceWar(a.id, b.id);
+      return true;
+    }
+    if (act.type === 'ally') {
+      if (a.allies.has(b.id) || a.wars.has(b.id) || b.id === this.playerId) return false;
+      a.allies.add(b.id);
+      b.allies.add(a.id);
+      a.relations.set(b.id, 90);
+      b.relations.set(a.id, 90);
+      return true;
+    }
+    if (act.type === 'peace') {
+      if (!a.wars.has(b.id)) return false;
+      a.wars.delete(b.id);
+      b.wars.delete(a.id);
+      a.relations.set(b.id, -20);
+      b.relations.set(a.id, -20);
+      return true;
+    }
+    return false;
+  }
+  /** War declaration without political cost, spreading through both alliance networks. */
+  forceWar(fromId: string, toId: string) {
+    const a = this.nations.get(fromId)!;
+    const b = this.nations.get(toId)!;
+    const sideA = [fromId, ...a.allies].filter((id) => this.nations.get(id)?.alive);
+    const sideB = [toId, ...b.allies].filter((id) => this.nations.get(id)?.alive);
+    for (const x of sideA)
+      for (const y of sideB) {
+        if (x === y) continue;
+        const nx = this.nations.get(x)!;
+        const ny = this.nations.get(y)!;
+        if (nx.allies.has(y)) continue;
+        nx.wars.add(y);
+        ny.wars.add(x);
+        nx.relations.set(y, -100);
+        ny.relations.set(x, -100);
+      }
+    this.events.emit('dirty');
   }
 
   // ---------------------------------------------------------------- AI
@@ -814,7 +894,7 @@ export class StrategySim {
     // build
     const owned = this.provincesOf(n.id);
     const armies = this.armiesOf(n.id);
-    const maxArmies = Math.floor(owned.length / 2) + 2;
+    const maxArmies = Math.min(12, Math.floor(owned.length / 2) + 2);
     if (armies.length < maxArmies && this.canRaiseArmy(n)) {
       const spot = owned.find((p) => p.capitalOf === n.id) ?? owned[0];
       if (spot) this.raiseArmy(n.id, spot.id);
@@ -827,9 +907,9 @@ export class StrategySim {
     }
     // diplomacy
     if (n.pp >= 60 && n.wars.size === 0) {
-      const aggression = per === 'aggressive' ? 0.35 : per === 'opportunist' ? 0.2 : 0.06;
+      const aggression = per === 'aggressive' ? 0.18 : per === 'opportunist' ? 0.06 : 0.008;
       if (this.rng.chance(aggression)) {
-        const targets = [...this.nations.values()].filter((o) => o.alive && o.id !== n.id && !n.allies.has(o.id) && (n.relations.get(o.id) ?? 0) < 20);
+        const targets = [...this.nations.values()].filter((o) => o.alive && o.id !== n.id && !n.allies.has(o.id) && (n.relations.get(o.id) ?? 0) < 0);
         targets.sort((a, b) => this.nationPower(a.id) - this.nationPower(b.id));
         const weakest = targets[0];
         if (weakest && this.nationPower(weakest.id) < this.nationPower(n.id) * (per === 'aggressive' ? 1.2 : 0.8) && this.sharesBorder(n.id, weakest.id)) {
@@ -892,7 +972,7 @@ export class StrategySim {
     }
     // 2. Attack the weakest enemy province adjacent to our territory
     const targets: { p: Province; d: number }[] = [];
-    const wantMinors = n.wars.size === 0 || per !== 'cautious';
+    const wantMinors = per === 'aggressive' && n.wars.size === 0 && this.rng.chance(0.15);
     for (const p of this.world.provinces) {
       if (!p.isLand || !p.owner || p.owner === n.id || this.isAllied(n.id, p.owner)) continue;
       const isMinor = p.owner === 'minor';
@@ -900,6 +980,7 @@ export class StrategySim {
       if (!isMinor && !n.wars.has(p.owner)) continue;
       const adjacentOurs = p.neighbors.some((nb) => this.world.provinces[nb].owner === n.id);
       if (!adjacentOurs) continue;
+      if (isMinor && !p.neighbors.some((nb) => this.world.provinces[nb].owner === n.id && this.world.provinces[nb].isLand)) continue;
       targets.push({ p, d: this.defenseOf(p) * (p.capitalOf ? 0.8 : 1) });
     }
     targets.sort((x, y) => x.d - y.d);

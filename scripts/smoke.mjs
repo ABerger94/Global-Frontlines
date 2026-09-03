@@ -84,11 +84,19 @@ try {
     const cap = app.sim.world.provinces.find((p) => p.capitalOf === app.sim.playerId);
     app.globe.focusProvince(cap.id, 2.2);
   });
-  await page.waitForTimeout(400);
+  await page.waitForTimeout(900);
   await page.mouse.click(720, 450);
   await page.waitForTimeout(400);
   const armyRow = await page.$('.province-panel .army-row[data-mine]');
-  if (!armyRow) errors.push('capital panel shows no army to select');
+  if (!armyRow) {
+    const dbg = await page.evaluate(() => {
+      const app = window.__gf;
+      const cap = app.sim.world.provinces.find((p) => p.capitalOf === app.sim.playerId);
+      const armies = app.sim.armiesOf(app.sim.playerId).map((a) => ({ n: a.name, at: app.sim.world.provinces[a.province].name, moving: a.path.length > 1 }));
+      return { capital: cap && cap.name, selected: app.stratUI.selectedProvince !== null ? app.sim.world.provinces[app.stratUI.selectedProvince].name : null, panel: document.querySelector('.province-panel h3')?.textContent, armies };
+    });
+    errors.push('capital panel shows no army to select: ' + JSON.stringify(dbg));
+  }
   else {
     await armyRow.click();
     await page.waitForTimeout(200);
@@ -109,6 +117,18 @@ try {
     }
   }
   await page.evaluate(() => window.__gf.stratUI.selectProvince(null));
+  await page.evaluate(() => {
+    const app = window.__gf;
+    const cap = app.sim.world.provinces.find((p) => p.capitalOf === app.sim.playerId);
+    app.globe.focusProvince(cap.id, 1.45);
+  });
+  await page.waitForTimeout(900);
+  await shot('04c-zoomed');
+  await page.evaluate(() => {
+    const app = window.__gf;
+    const cap = app.sim.world.provinces.find((p) => p.capitalOf === app.sim.playerId);
+    app.globe.focusProvince(cap.id, 2.6);
+  });
   // open research & production tabs
   await page.click('[data-tab=research]');
   await page.waitForTimeout(400);

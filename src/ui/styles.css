@@ -172,6 +172,9 @@ kbd { font-family: var(--font-mono); background: rgba(255,255,255,0.1); border: 
 .globe-label { position: absolute; left: 0; top: 0; pointer-events: none; white-space: nowrap; font-size: 11px; will-change: transform; }
 .globe-label.capital { font-family: var(--font-display); letter-spacing: 0.12em; text-transform: uppercase; color: #fff; text-shadow: 0 1px 4px #000, 0 0 10px #000; font-size: 12px; margin-top: -14px; }
 .globe-label.province { font-family: var(--font-display); color: var(--accent); text-shadow: 0 1px 4px #000; font-size: 13px; margin-top: 16px; }
+.globe-label.capital.minor { font-size: 10px; letter-spacing: 0.1em; color: rgba(255,255,255,0.85); }
+.globe-label.country { font-family: var(--font-display); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: rgba(255,255,255,0.7); text-shadow: 0 1px 3px #000; }
+.globe-label.provname { font-family: var(--font-body); font-size: 10px; color: rgba(255,255,255,0.75); text-shadow: 0 1px 3px #000, 0 0 6px #000; letter-spacing: 0.02em; }
 .globe-label.army { font-family: var(--font-mono); color: #fff; background: var(--c, #888); padding: 1px 5px; border-radius: 3px; border: 1px solid rgba(0,0,0,0.5); box-shadow: 0 1px 3px #000; margin-top: -18px; }
 .globe-label.army.sel { outline: 2px solid #fff; }
 .globe-label.army.moving { opacity: 0.85; }

@@ -54,6 +54,14 @@ export interface NationDef {
   weapons: NationWeapons;
   tankName: string;
   planeName: string;
+  /** Selectable in the campaign menu (default true). */
+  playable?: boolean;
+  /** Flag stripes, top to bottom (or left to right with dir 'v'). */
+  flag?: { colors: number[]; dir?: 'h' | 'v' };
+  /** Short description of territory at the campaign start. */
+  holdings?: string;
+  /** Starting field armies (overrides the territory-based default). */
+  armies?: number;
 }
 
 export interface TechEffects {
@@ -112,4 +120,6 @@ export interface EraDef {
   /** Kits locked behind a tech (kit -> tech id). */
   kitLocks: Partial<Record<KitId, string>>;
   focus: string[];
+  /** Country ownership table, AI powers and dated events for this era. */
+  politics: import('./history').EraPolitics;
 }
