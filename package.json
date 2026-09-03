@@ -1,7 +1,7 @@
 {
   "name": "global-frontlines",
   "version": "0.1.0",
-  "description": "Global Frontlines: Theater of War — a grand strategy / first-person shooter hybrid",
+  "description": "Global Frontlines: Theater of War \u2014 a grand strategy / first-person shooter hybrid",
   "private": true,
   "type": "module",
   "scripts": {
@@ -9,7 +9,8 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "smoke": "node scripts/smoke.mjs"
+    "smoke": "node scripts/smoke.mjs",
+    "simtest": "node scripts/simtest.mjs"
   },
   "dependencies": {
     "three": "^0.185.1"
@@ -18,6 +19,9 @@
     "@types/three": "^0.185.0",
     "typescript": "^5.9.3",
     "vite": "^7.1.0",
-    "playwright": "^1.62.1"
+    "playwright-core": "^1.62.1"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

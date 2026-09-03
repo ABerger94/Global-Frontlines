@@ -1,12 +1,26 @@
 // Runs the strategy simulation headlessly for every era to check stability and balance.
-import { chromium } from 'playwright';
+import { chromium } from 'playwright-core';
 import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
+
+/** Locate a Chromium binary: CHROME_PATH, a Playwright browser cache, or a system Chrome. */
+function chromePath() {
+  const candidates = [
+    '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+    '/usr/bin/chromium', '/usr/bin/chromium-browser', '/usr/bin/google-chrome',
+    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+    'C:/Program Files/Google/Chrome/Application/chrome.exe',
+  ];
+  const found = candidates.find((c) => existsSync(c));
+  if (!found) throw new Error('No Chromium found. Set CHROME_PATH or run: npx playwright install chromium');
+  return found;
+}
 
 const PORT = Number(process.env.PORT || 4190);
 const DAYS = Number(process.env.DAYS || 400);
 const server = spawn('npx', ['vite', 'preview', '--port', String(PORT), '--strictPort'], { stdio: 'pipe', detached: true });
 await new Promise((r) => setTimeout(r, 2500));
-const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH || chromePath(), args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 const page = await browser.newPage();
 const errors = [];
 page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));

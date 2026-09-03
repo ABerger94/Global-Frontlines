@@ -24,6 +24,21 @@ npm run smoke      # headless Playwright walkthrough with screenshots (scripts/o
 Requirements: a modern browser with WebGL 2, a mouse and a keyboard. No assets are downloaded; every
 world, battlefield, soldier, weapon and sound is generated procedurally at runtime.
 
+## Deploying to Vercel
+
+The repo is a static Vite site and ships with a `vercel.json`, so deployment is zero-config:
+
+1. Import the repository at [vercel.com/new](https://vercel.com/new). Vercel detects the Vite framework
+   preset; the config pins `npm ci` for install, `npm run build` for build and `dist` as the output.
+2. Deploy. There are no environment variables, serverless functions or databases.
+
+Or from the command line: `npx vercel --prod`. Every push to the connected branch produces a new
+deployment; the `assets/` bundle is served with immutable caching and the Three.js chunk is split
+from the game code so it stays cached between releases.
+
+The headless smoke test uses `playwright-core` and needs a Chromium binary. Set `CHROME_PATH`, or run
+`npx playwright install chromium` once, before `npm run smoke`.
+
 ## How to play
 
 **Strategy layer**
