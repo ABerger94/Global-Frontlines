@@ -211,6 +211,11 @@ export class BattleScene {
     this.pointerHint.innerHTML = 'CLICK TO TAKE CONTROL<small>Esc pauses · Tab opens the command map</small>';
     this.pointerHint.addEventListener('click', () => this.input.requestLock());
     uiRoot.appendChild(this.pointerHint);
+    // Browsers swallow the Esc keydown that exits pointer lock, so treat lock loss as the pause request.
+    this.input.onLockLost = () => {
+      if (this.ended || this.paused || this.mode === 'commander' || !this.player.alive || this.time < 0.5) return;
+      this.pause();
+    };
 
     // spawn forces
     this.spawnInitialForces();

@@ -50,6 +50,65 @@ try {
   await page.click('[data-act=start]');
   await page.waitForTimeout(3500);
   await shot('04-strategy');
+  // --- real mouse interaction on the globe: drag rotates, wheel zooms, click selects a province
+  const camBefore = await page.evaluate(() => window.__gf.globe.camera.position.toArray());
+  const cx = 720, cy = 450;
+  await page.mouse.move(cx, cy);
+  await page.mouse.down();
+  for (let i = 1; i <= 10; i++) await page.mouse.move(cx + i * 25, cy + i * 6);
+  await page.mouse.up();
+  await page.waitForTimeout(600);
+  const camAfterDrag = await page.evaluate(() => window.__gf.globe.camera.position.toArray());
+  const dragMoved = camBefore.some((v, i) => Math.abs(v - camAfterDrag[i]) > 0.01);
+  await page.mouse.wheel(0, -600);
+  await page.waitForTimeout(600);
+  const camAfterZoom = await page.evaluate(() => window.__gf.globe.camera.position.length());
+  const zoomed = Math.abs(camAfterZoom - Math.hypot(...camAfterDrag)) > 0.02;
+  const underCursor = await page.evaluate(() => document.elementFromPoint(720, 450)?.id);
+  await page.mouse.click(720, 450);
+  await page.waitForTimeout(400);
+  const panelVisible = await page.evaluate(() => {
+    const p = document.querySelector('.province-panel');
+    return !!p && p.style.display !== 'none' && p.textContent.length > 10;
+  });
+  console.log('globe interaction', { dragMoved, zoomed, underCursor, panelVisible });
+  if (!dragMoved) errors.push('globe drag did not rotate the camera');
+  if (!zoomed) errors.push('wheel did not zoom the globe');
+  if (underCursor !== 'gl') errors.push('canvas is not the element under the cursor: ' + underCursor);
+  if (!panelVisible) errors.push('clicking the globe did not open the province panel');
+  await shot('04b-province-panel');
+  await page.click('[data-act=closeProvince]');
+  // --- UI-driven army order: select the capital (screen centre), pick its army, click a neighbouring province
+  await page.evaluate(() => {
+    const app = window.__gf;
+    const cap = app.sim.world.provinces.find((p) => p.capitalOf === app.sim.playerId);
+    app.globe.focusProvince(cap.id, 2.2);
+  });
+  await page.waitForTimeout(400);
+  await page.mouse.click(720, 450);
+  await page.waitForTimeout(400);
+  const armyRow = await page.$('.province-panel .army-row[data-mine]');
+  if (!armyRow) errors.push('capital panel shows no army to select');
+  else {
+    await armyRow.click();
+    await page.waitForTimeout(200);
+    const target = await page.evaluate(() => {
+      const app = window.__gf;
+      const cap = app.sim.world.provinces.find((p) => p.capitalOf === app.sim.playerId);
+      const nb = cap.neighbors.map((i) => app.sim.world.provinces[i]).find((q) => q.isLand && q.owner === app.sim.playerId);
+      if (!nb) return null;
+      const v = nb.pos.clone().multiplyScalar(1.01).project(app.globe.camera);
+      return { id: nb.id, name: nb.name, x: (v.x * 0.5 + 0.5) * innerWidth, y: (-v.y * 0.5 + 0.5) * innerHeight };
+    });
+    if (target) {
+      await page.mouse.click(target.x, target.y);
+      await page.waitForTimeout(300);
+      const moving = await page.evaluate(() => window.__gf.sim.armiesOf(window.__gf.sim.playerId).some((a) => a.path.length > 1));
+      console.log('ui army order', { target: target.name, moving });
+      if (!moving) errors.push('clicking a destination after selecting an army did not issue a move order');
+    }
+  }
+  await page.evaluate(() => window.__gf.stratUI.selectProvince(null));
   // open research & production tabs
   await page.click('[data-tab=research]');
   await page.waitForTimeout(400);
@@ -89,6 +148,9 @@ try {
   await page.waitForSelector('.hud', { timeout: 30000 });
   await page.waitForTimeout(6000);
   await shot('09-battle');
+  const battleHit = await page.evaluate(() => document.elementFromPoint(720, 450)?.id || document.elementFromPoint(720, 450)?.className);
+  console.log('battle element under cursor', battleHit);
+  if (battleHit !== 'gl') errors.push('battle HUD intercepts mouse input: ' + battleHit);
   await page.keyboard.press('Tab');
   await page.waitForTimeout(1500);
   await shot('10-commander');
