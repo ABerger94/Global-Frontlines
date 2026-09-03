@@ -12,6 +12,7 @@ export class Input {
   mouseNDC = new THREE.Vector2();
   private handlers: Array<[EventTarget, string, EventListener]> = [];
   wantsLock = false;
+  onLockLost: (() => void) | null = null;
 
   constructor(readonly canvas: HTMLCanvasElement) {
     const on = (t: EventTarget, type: string, fn: (e: any) => void) => {
@@ -44,7 +45,12 @@ export class Input {
       this.wheel += Math.sign(e.deltaY);
     }));
     on(document, 'pointerlockchange', (() => {
+      const was = this.locked;
       this.locked = document.pointerLockElement === canvas;
+      if (was && !this.locked) this.onLockLost?.();
+    }));
+    on(document, 'pointerlockerror', (() => {
+      this.locked = false;
     }));
     on(window, 'blur', (() => {
       this.keys.clear();
