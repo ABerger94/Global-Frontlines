@@ -14,6 +14,7 @@ the strategic situation. Your munitions, equipment quality, artillery, air power
 onto the field, and the battle's outcome flows straight back to the map.
 
 ![Strategy globe](docs/screenshots/strategy.png)
+![Europe, August 1914](docs/screenshots/europe-1914.png)
 ![WWII battle](docs/screenshots/battle-ww2.png)
 
 ## Running it
