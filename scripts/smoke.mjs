@@ -49,23 +49,22 @@ try {
     const app = window.__gf;
     const sim = app.sim;
     if (ALLTECH) for (const t of sim.era.techs) sim.player.techs.add(t.id);
+    const enemyLand = (q) => q.isLand && q.owner && q.owner !== sim.playerId && !sim.isAllied(sim.playerId, q.owner) && (q.owner === 'minor' || sim.player.wars.has(q.owner));
     const armies = sim.armiesOf(sim.playerId);
-    const a = armies[0];
-    const here = sim.world.provinces[a.province];
-    let target = null;
-    for (const nb of here.neighbors) {
-      const q = sim.world.provinces[nb];
-      if (q.isLand && q.owner && q.owner !== sim.playerId && (q.owner === 'minor' || sim.player.wars.has(q.owner))) { target = q; break; }
+    // adjacent targets first, then anything reachable
+    for (const a of armies) {
+      const here = sim.world.provinces[a.province];
+      for (const nb of here.neighbors) {
+        const q = sim.world.provinces[nb];
+        if (enemyLand(q) && sim.moveArmy(a.id, q.id)) { app.stratUI.setSpeed(3); return { ok: true, army: a.name, target: q.name, adjacent: true }; }
+      }
     }
-    if (!target) {
-      for (const q of sim.world.provinces) if (q.isLand && q.owner === 'minor') { target = q; break; }
-    }
-    const ok = sim.moveArmy(a.id, target.id);
-    app.stratUI.setSpeed(3);
-    return { ok, army: a.name, target: target.name };
+    const targets = sim.world.provinces.filter(enemyLand);
+    for (const a of armies) for (const q of targets) if (sim.moveArmy(a.id, q.id)) { app.stratUI.setSpeed(3); return { ok: true, army: a.name, target: q.name, adjacent: false, days: a.path.length }; }
+    return { ok: false };
   }, ALLTECH);
   console.log('move order', info);
-  await page.waitForSelector('[data-battle=command]', { timeout: 60000 });
+  await page.waitForSelector('[data-battle=command]', { timeout: 150000 });
   await shot('07-battle-prompt');
   await page.click('[data-battle=command]');
   await page.waitForTimeout(300);

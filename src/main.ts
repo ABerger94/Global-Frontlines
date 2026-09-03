@@ -288,3 +288,4 @@ class App {
 
 const app = new App();
 (window as any).__gf = app;
+(window as any).__gf.debug = { StrategySim, ERAS };
