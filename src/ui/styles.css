@@ -72,8 +72,9 @@ kbd { font-family: var(--font-mono); background: rgba(255,255,255,0.1); border: 
 .card .tags span { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; padding: 3px 8px; border-radius: 3px; background: rgba(255,255,255,0.06); color: var(--text); }
 .card .swatch { position: absolute; top: 0; left: 0; width: 6px; height: 100%; }
 .card .flag { width: 44px; height: 30px; border-radius: 3px; margin-bottom: 10px; border: 1px solid rgba(255,255,255,0.2); }
-.card .stat { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 6px; margin-top: 6px; }
-.card .stat b { color: var(--text); }
+.card .stat { display: flex; justify-content: space-between; gap: 14px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 6px; margin-top: 6px; }
+.card .stat span { flex-shrink: 0; }
+.card .stat b { color: var(--text); text-align: right; }
 .setup-foot { display: flex; justify-content: space-between; align-items: center; padding: 16px 48px 28px; border-top: 1px solid var(--line); }
 
 /* ---------- strategy UI ---------- */

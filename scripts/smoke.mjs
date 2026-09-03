@@ -81,6 +81,7 @@ try {
   // --- UI-driven army order: select the capital (screen centre), pick its army, click a neighbouring province
   await page.evaluate(() => {
     const app = window.__gf;
+    app.stratUI.setSpeed(0); // freeze the simulation so panels do not re-render mid-interaction
     const cap = app.sim.world.provinces.find((p) => p.capitalOf === app.sim.playerId);
     app.globe.focusProvince(cap.id, 2.2);
   });
@@ -98,12 +99,17 @@ try {
     errors.push('capital panel shows no army to select: ' + JSON.stringify(dbg));
   }
   else {
-    await armyRow.click();
+    await page.click('.province-panel .army-row[data-mine]');
     await page.waitForTimeout(200);
     const target = await page.evaluate(() => {
       const app = window.__gf;
       const cap = app.sim.world.provinces.find((p) => p.capitalOf === app.sim.playerId);
-      const nb = cap.neighbors.map((i) => app.sim.world.provinces[i]).find((q) => q.isLand && q.owner === app.sim.playerId);
+      const w = app.sim.world;
+      const counts = new Map();
+      for (let i = 0; i < w.indexMap.length; i += 7) counts.set(w.indexMap[i], (counts.get(w.indexMap[i]) || 0) + 1);
+      const cands = cap.neighbors.map((i) => w.provinces[i]).filter((q) => q.isLand && q.owner === app.sim.playerId);
+      cands.sort((a, b) => (counts.get(b.id) || 0) - (counts.get(a.id) || 0));
+      const nb = cands[0];
       if (!nb) return null;
       const v = nb.pos.clone().multiplyScalar(1.01).project(app.globe.camera);
       return { id: nb.id, name: nb.name, x: (v.x * 0.5 + 0.5) * innerWidth, y: (-v.y * 0.5 + 0.5) * innerHeight };
@@ -112,8 +118,13 @@ try {
       await page.mouse.click(target.x, target.y);
       await page.waitForTimeout(300);
       const moving = await page.evaluate(() => window.__gf.sim.armiesOf(window.__gf.sim.playerId).some((a) => a.path.length > 1));
-      console.log('ui army order', { target: target.name, moving });
-      if (!moving) errors.push('clicking a destination after selecting an army did not issue a move order');
+      const diag = await page.evaluate(() => {
+        const app = window.__gf;
+        const sel = app.stratUI.selectedProvince;
+        return { selected: sel !== null ? app.sim.world.provinces[sel].name : null, moveMode: app.stratUI.moveMode, selectedArmy: app.stratUI.selectedArmy, lastLog: [...document.querySelectorAll('.log .entry')].map((e) => e.textContent).slice(-2) };
+      });
+      console.log('ui army order', { target, moving, diag });
+      if (!moving) errors.push('clicking a destination after selecting an army did not issue a move order: ' + JSON.stringify({ target, diag }));
     }
   }
   await page.evaluate(() => window.__gf.stratUI.selectProvince(null));

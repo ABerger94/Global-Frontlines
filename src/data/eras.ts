@@ -176,7 +176,7 @@ const modernNations: NationDef[] = [
     description: 'Artillery, electronic warfare and depth. Strategic reserves but a strained economy.',
     strengths: ['+2 artillery strikes', 'Electronic warfare', 'Vast territory'],
     weapons: { rifle: 'ak12', lmg: 'pkm', dmr: 'svd', pistol: 'mp443' }, tankName: 'T-90M', planeName: 'Su-57',
-    flag: { colors: [0xffffff, 0x0039a6, 0xd52b1e] }, armies: 9, holdings: 'Russian Federation from Kaliningrad to Kamchatka',
+    flag: { colors: [0xffffff, 0x0039a6, 0xd52b1e] }, armies: 11, holdings: 'Russian Federation from Kaliningrad to Kamchatka',
   },
   {
     id: 'nato', name: 'NATO Coalition', adjective: 'Coalition', color: 0x2f4fb0,
@@ -185,7 +185,7 @@ const modernNations: NationDef[] = [
     description: 'Europe united under one command. Interoperable, well-equipped, politically fragile.',
     strengths: ['+30% industry', 'Allied stability', 'HK416 squads'],
     weapons: { rifle: 'hk416', lmg: 'm249', dmr: 'm110', pistol: 'glock17' }, tankName: 'Leopard 2A7', planeName: 'Eurofighter Typhoon',
-    flag: { colors: [0x004990, 0xffffff, 0x004990] }, armies: 8, holdings: 'European NATO members, the UK, Canada, Greenland',
+    flag: { colors: [0x004990, 0xffffff, 0x004990] }, armies: 7, holdings: 'European NATO members, the UK, Canada, Greenland',
   },
   {
     id: 'regional', name: 'Regional Coalition', adjective: 'Coalition', color: 0xc78a2b,

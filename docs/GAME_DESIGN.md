@@ -51,9 +51,16 @@ strategic tempo.
 
 ## 3. Grand Strategy Layer
 
-The macro view is a 3D globe. Provinces are generated at campaign start (procedural continents
-anchored on real capital coordinates) so every campaign has a fresh map but nations sit where you
-expect them.
+The macro view is a 3D globe of the real Earth. Coastlines and country borders come from Natural
+Earth (110 m). At campaign start each country is subdivided into provinces (by area and population,
+seeded with farthest-point sampling so Alaska, Hawaii and Kaliningrad get their own), named from a
+gazetteer of historical regions and real cities, and assigned to a nation from the era's political
+table (`src/data/history.ts`). Terrain comes from mountain and desert belts plus noise; oil sits where
+the oil is. Independent countries keep their own identity and can be invaded at a stability cost.
+
+Each era also carries non-playable AI powers (Austria-Hungary, Italy, Serbia, Belgium, China, Finland,
+Hungary, Romania, Vichy France, Ukraine, Japan, Korea, India and others) and a track of dated events
+that fire as the calendar advances. Events never script the player's own nation.
 
 ### 3.1 Province
 Each province has: owner, terrain type (plains / forest / hills / mountain / urban / desert /

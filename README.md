@@ -3,7 +3,12 @@
 A grand-strategy war game fused with a first-person shooter, running entirely in the browser.
 
 Pick an era (**World War I**, **World War II**, **Present Day**) and a nation, then run your war from a
-3D globe: economy, research, diplomacy and army movement. When two armies collide you can
+3D globe of the real world: economy, research, diplomacy and army movement. Borders and coastlines come
+from Natural Earth, provinces are carved inside real countries and named after real regions and cities,
+and each era starts from its historical political map: the empires of 1914, German-occupied Europe in
+December 1941, and the blocs of 2026. Non-playable powers such as Austria-Hungary, Italy, China, Finland
+and Ukraine act as AI nations, and dated historical events (Italy and the USA entering the Great War, the
+Russian revolutions, Romania switching sides) fire as the calendar advances. When two armies collide you can
 **Auto-Resolve** the battle or **Take Command** and drop into a first-person battlefield generated from
 the strategic situation. Your munitions, equipment quality, artillery, air power and tech all follow you
 onto the field, and the battle's outcome flows straight back to the map.
@@ -21,8 +26,9 @@ npm run preview    # serve the production bundle
 npm run smoke      # headless Playwright walkthrough with screenshots (scripts/out/)
 ```
 
-Requirements: a modern browser with WebGL 2, a mouse and a keyboard. No assets are downloaded; every
-world, battlefield, soldier, weapon and sound is generated procedurally at runtime.
+Requirements: a modern browser with WebGL 2, a mouse and a keyboard. The only data shipped is a 160 KB
+Natural Earth extract (public domain, rebuilt with `node scripts/build-world-data.mjs`); every
+battlefield, soldier, weapon and sound is generated procedurally at runtime.
 
 ## Deploying to Vercel
 
@@ -94,13 +100,13 @@ contested province shows up as reinforcements mid-battle.
 ```
 src/
   core/       seeded RNG, 3D noise, maths, event bus
-  data/       eras, nations, weapons, tech trees, kits
+  data/       eras, nations, weapons, tech trees, kits, era politics & events, region gazetteer, geo/ (Natural Earth extract)
   strategy/   world generator, simulation (economy, AI, diplomacy, battles), globe scene, UI
   battle/     terrain generator, effects, AI soldiers, player, tank, support, commander map, HUD
   audio/      WebAudio synthesiser
   ui/         menus and styles
 docs/         GAME_DESIGN.md — the full design document
-scripts/      smoke.mjs — headless end-to-end test
+scripts/      smoke.mjs — headless end-to-end test · simtest.mjs — simulation balance run · build-world-data.mjs — geography pipeline
 ```
 
 Built with [Three.js](https://threejs.org), TypeScript and Vite.

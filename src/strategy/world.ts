@@ -245,8 +245,15 @@ export function generateWorld(era: EraDef, seed: number): World {
 
   // 1. country raster
   const countryMap = new Uint16Array(W * H).fill(NONE);
+  const polyMap = new Uint16Array(W * H).fill(NONE);
+  const polyCountry: number[] = [];
   COUNTRIES.forEach((c, ci) => {
-    for (const poly of c.polygons) fillPolygon(poly, ci, countryMap, W, H);
+    for (const poly of c.polygons) {
+      const pi = polyCountry.length;
+      polyCountry.push(ci);
+      fillPolygon(poly, ci, countryMap, W, H);
+      fillPolygon(poly, pi, polyMap, W, H);
+    }
   });
   const landMask = new Uint8Array(W * H);
   for (let i = 0; i < W * H; i++) {
@@ -265,26 +272,35 @@ export function generateWorld(era: EraDef, seed: number): World {
   };
 
   // 2. per-country pixel candidates (subsampled) + area
+  const nPoly = polyCountry.length;
   const pxCount = new Float64Array(COUNTRIES.length);
   const areaKm = new Float64Array(COUNTRIES.length);
+  const polyPx = new Float64Array(nPoly);
+  const polyArea = new Float64Array(nPoly);
   for (let y = 0; y < H; y++) {
     const lat = 90 - ((y + 0.5) / H) * 180;
     const w = 382 * Math.cos((lat * Math.PI) / 180);
     for (let x = 0; x < W; x++) {
-      const ci = countryMap[y * W + x];
+      const i = y * W + x;
+      const ci = countryMap[i];
       if (ci === NONE) continue;
       pxCount[ci]++;
       areaKm[ci] += w;
+      const pi = polyMap[i];
+      if (pi !== NONE) {
+        polyPx[pi]++;
+        polyArea[pi] += w;
+      }
     }
   }
-  const candidates: Int32Array[] = COUNTRIES.map((_, ci) => new Int32Array(Math.min(1600, pxCount[ci])));
-  const candFill = new Int32Array(COUNTRIES.length);
-  const stride = COUNTRIES.map((_, ci) => Math.max(1, Math.ceil(pxCount[ci] / 1600)));
-  const seen = new Int32Array(COUNTRIES.length);
+  const candidates: Int32Array[] = polyCountry.map((_, pi) => new Int32Array(Math.min(1400, polyPx[pi])));
+  const candFill = new Int32Array(nPoly);
+  const stride = polyCountry.map((_, pi) => Math.max(1, Math.ceil(polyPx[pi] / 1400)));
+  const seen = new Int32Array(nPoly);
   for (let i = 0; i < W * H; i++) {
-    const ci = countryMap[i];
-    if (ci === NONE) continue;
-    if (seen[ci]++ % stride[ci] === 0 && candFill[ci] < candidates[ci].length) candidates[ci][candFill[ci]++] = i;
+    const pi = polyMap[i];
+    if (pi === NONE) continue;
+    if (seen[pi]++ % stride[pi] === 0 && candFill[pi] < candidates[pi].length) candidates[pi][candFill[pi]++] = i;
   }
   const pixelPos = (i: number, out = new THREE.Vector3()) => {
     const x = i % W;
@@ -297,30 +313,22 @@ export function generateWorld(era: EraDef, seed: number): World {
   const countrySeeds: number[][] = COUNTRIES.map(() => []);
   const cityCapital = new Map<string, CityData>();
   for (const c of CITIES) if (c.cap && !cityCapital.has(c.c)) cityCapital.set(c.c, c);
-  COUNTRIES.forEach((c, ci) => {
-    const n = candFill[ci];
-    if (n === 0) return;
-    const ice = ICE_COUNTRIES.has(c.id);
-    const kArea = Math.pow(areaKm[ci] / 60000, 0.55);
-    const kPop = Math.sqrt(Math.max(0.2, c.pop / 8e6));
-    const k = ice ? 4 : clamp(Math.round(0.5 * kArea + 0.5 * kPop), 1, 14);
+  /** Farthest-point sampling inside one polygon; the first seed hugs `anchor` when given. */
+  const samplePolygon = (pi: number, k: number, anchor: THREE.Vector3 | null): THREE.Vector3[] => {
+    const n = candFill[pi];
+    if (n === 0 || k <= 0) return [];
     const pts: THREE.Vector3[] = [];
-    for (let i = 0; i < n; i++) pts.push(pixelPos(candidates[ci][i]));
+    for (let i = 0; i < n; i++) pts.push(pixelPos(candidates[pi][i]));
     const dist = new Float32Array(n).fill(Infinity);
     const chosen: number[] = [];
-    let first = 0;
-    const cap = cityCapital.get(c.id);
-    if (cap) {
-      const cv = latLonToVec3(cap.lat, cap.lon);
+    let first = Math.floor(rng.next() * n);
+    if (anchor) {
       let bd = Infinity;
       for (let i = 0; i < n; i++) {
-        const d = angularDistance(pts[i], cv);
-        if (d < bd) {
-          bd = d;
-          first = i;
-        }
+        const d = angularDistance(pts[i], anchor);
+        if (d < bd) (bd = d), (first = i);
       }
-    } else first = Math.floor(rng.next() * n);
+    }
     chosen.push(first);
     for (let i = 0; i < n; i++) dist[i] = angularDistance(pts[i], pts[first]);
     while (chosen.length < k) {
@@ -331,8 +339,39 @@ export function generateWorld(era: EraDef, seed: number): World {
       chosen.push(bi);
       for (let i = 0; i < n; i++) dist[i] = Math.min(dist[i], angularDistance(pts[i], pts[bi]));
     }
-    for (const idx of chosen) {
-      const v = pts[idx];
+    return chosen.map((i) => pts[i]);
+  };
+  COUNTRIES.forEach((c, ci) => {
+    if (pxCount[ci] === 0) return;
+    const ice = ICE_COUNTRIES.has(c.id);
+    const kArea = Math.pow(areaKm[ci] / 60000, 0.6) * 0.7;
+    const kPop = Math.sqrt(Math.max(0.2, c.pop / 8e6));
+    const k = ice ? 4 : clamp(Math.round(Math.min(kArea + 0.7 * kPop, kPop * 4 + 2)), 1, 14);
+    // polygons of this country, largest first; overseas pieces earn a seed only when big
+    const polys = polyCountry.map((cc, pi) => ({ cc, pi })).filter((x) => x.cc === ci && polyPx[x.pi] > 0).map((x) => x.pi);
+    polys.sort((a, b) => polyArea[b] - polyArea[a]);
+    const cap = cityCapital.get(c.id);
+    const anchor = cap ? latLonToVec3(cap.lat, cap.lon) : null;
+    const seeds: THREE.Vector3[] = [];
+    const main = polys[0];
+    const secondaries = polys.slice(1).filter((pi) => polyArea[pi] >= Math.max(60000, areaKm[ci] * 0.08));
+    let kMain = Math.max(1, k - secondaries.length);
+    // find which polygon holds the capital city
+    let capPoly = main;
+    if (cap) {
+      const px = ((Math.floor(((cap.lon + 180) / 360) * W) % W) + W) % W;
+      const py = clamp(Math.floor(((90 - cap.lat) / 180) * H), 0, H - 1);
+      const pi = polyMap[py * W + px];
+      if (pi !== NONE && polyCountry[pi] === ci) capPoly = pi;
+    }
+    if (capPoly !== main && !secondaries.includes(capPoly)) secondaries.push(capPoly);
+    kMain = Math.max(1, k - secondaries.length);
+    for (const v of samplePolygon(main, kMain + (capPoly === main ? 0 : 0), capPoly === main ? anchor : null)) seeds.push(v);
+    for (const pi of secondaries) {
+      const share = Math.max(1, Math.round((polyArea[pi] / areaKm[ci]) * k));
+      for (const v of samplePolygon(pi, capPoly === pi ? Math.max(1, share) : Math.min(share, 2), capPoly === pi ? anchor : null)) seeds.push(v);
+    }
+    for (const v of seeds) {
       const { lat, lon } = vec3ToLatLon(v);
       countrySeeds[ci].push(provinces.length);
       provinces.push({
