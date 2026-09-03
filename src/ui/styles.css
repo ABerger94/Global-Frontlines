@@ -78,27 +78,28 @@ kbd { font-family: var(--font-mono); background: rgba(255,255,255,0.1); border: 
 /* ---------- strategy UI ---------- */
 .strat { position: absolute; inset: 0; pointer-events: none; }
 .strat > * { pointer-events: auto; }
-.topbar { position: absolute; top: 0; left: 0; right: 0; height: 58px; display: flex; align-items: center; gap: 12px; padding: 0 16px; background: linear-gradient(180deg, rgba(5,8,14,0.95), rgba(5,8,14,0.7)); border-bottom: 1px solid var(--line); }
+.topbar { position: absolute; top: 0; left: 0; right: 0; height: 58px; display: flex; align-items: center; gap: 10px; padding: 0 12px; overflow: hidden; background: linear-gradient(180deg, rgba(5,8,14,0.95), rgba(5,8,14,0.7)); border-bottom: 1px solid var(--line); }
 .topbar .nation { display: flex; align-items: center; gap: 10px; padding-right: 14px; border-right: 1px solid var(--line); }
 .topbar .nation .flag { width: 30px; height: 20px; border-radius: 2px; border: 1px solid rgba(255,255,255,0.25); }
-.topbar .nation b { font-family: var(--font-display); font-size: 17px; letter-spacing: 0.04em; text-transform: uppercase; }
-.topbar .res { display: flex; gap: 14px; }
-.res .r { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.1; min-width: 62px; cursor: default; }
+.topbar .nation b { font-family: var(--font-display); font-size: 16px; letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap; max-width: 190px; overflow: hidden; text-overflow: ellipsis; }
+.topbar .res { display: flex; gap: 10px; }
+.res .r { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.1; min-width: 54px; cursor: default; }
 .res .r small { white-space: nowrap; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
 .res .r b { font-family: var(--font-mono); font-size: 15px; }
 .res .r b i { font-style: normal; font-size: 11px; color: var(--muted); margin-left: 3px; }
 .res .r.warn b { color: var(--accent); }
 .res .r.bad b { color: var(--danger); }
 .topbar .date { margin-left: auto; text-align: right; white-space: nowrap; }
-.topbar .date b { font-family: var(--font-display); font-size: 18px; letter-spacing: 0.05em; display: block; }
+.topbar .date b { font-family: var(--font-display); font-size: 16px; letter-spacing: 0.05em; display: block; }
 .topbar .date small { color: var(--muted); font-size: 11px; }
 .speed { display: flex; gap: 2px; }
-.speed button { width: 32px; height: 30px; background: rgba(255,255,255,0.06); border: 1px solid var(--line); color: var(--text); cursor: pointer; font-family: var(--font-mono); }
+.speed { flex-shrink: 0; }
+.speed button { width: 30px; height: 30px; background: rgba(255,255,255,0.06); border: 1px solid var(--line); color: var(--text); cursor: pointer; font-family: var(--font-mono); }
 .speed button.on { background: var(--accent); color: #1a1408; }
 .speed button:first-child { border-radius: 4px 0 0 4px; }
 .speed button:last-child { border-radius: 0 4px 4px 0; }
 .tabs { display: flex; gap: 4px; }
-.tabs .btn { padding: 6px 12px; }
+.tabs .btn { padding: 6px 10px; white-space: nowrap; }
 .tabs .btn.on { border-color: var(--accent); color: var(--accent); }
 
 .panel { position: absolute; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; backdrop-filter: blur(8px); box-shadow: 0 10px 40px rgba(0,0,0,0.4); }

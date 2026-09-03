@@ -79,7 +79,7 @@ export function generateWorld(era: EraDef, seed: number): World {
     let boost = 0;
     for (const c of capitals) {
       const d = angularDistance(v, c.v);
-      boost += Math.max(0, 1 - d / 0.3) * 0.55;
+      boost += Math.max(0, 1 - d / 0.3) * 0.55 + Math.max(0, 1 - d / 0.12) * 0.7;
     }
     const n = noise.fbm(v.x * 1.5, v.y * 1.5, v.z * 1.5, 5, 2.1, 0.52);
     const n2 = noise.fbm(v.x * 4.5 + 3.1, v.y * 4.5, v.z * 4.5, 3, 2, 0.5) * 0.22;
@@ -88,6 +88,8 @@ export function generateWorld(era: EraDef, seed: number): World {
 
   // --- candidate points
   const pts: THREE.Vector3[] = [];
+  // capital centres first so the de-duplication pass keeps them
+  for (const c of capitals) pts.push(c.v.clone());
   const N = 560;
   const golden = Math.PI * (3 - Math.sqrt(5));
   for (let i = 0; i < N; i++) {
@@ -151,8 +153,8 @@ export function generateWorld(era: EraDef, seed: number): World {
   }
 
   // --- pixel index map (equirectangular)
-  const W = 640;
-  const H = 320;
+  const W = 960;
+  const H = 480;
   const indexMap = new Uint16Array(W * H);
   const px = new Float32Array(provinces.length * 3);
   provinces.forEach((p, i) => {
@@ -234,8 +236,23 @@ export function generateWorld(era: EraDef, seed: number): World {
     return best;
   };
   const claims: { n: NationDef; cap: Province; want: number; have: Province[] }[] = [];
+  const takenCapitals = new Set<number>();
+  const nearestFreeLand = (v: THREE.Vector3): Province => {
+    let best: Province | null = null;
+    let bestD = Infinity;
+    for (const p of land) {
+      if (takenCapitals.has(p.id)) continue;
+      const d = angularDistance(v, p.pos);
+      if (d < bestD) {
+        bestD = d;
+        best = p;
+      }
+    }
+    return best ?? nearestLand(v);
+  };
   for (const c of capitals) {
-    const cap = nearestLand(c.v);
+    const cap = nearestFreeLand(c.v);
+    takenCapitals.add(cap.id);
     cap.owner = c.n.id;
     cap.capitalOf = c.n.id;
     cap.terrain = 'urban';

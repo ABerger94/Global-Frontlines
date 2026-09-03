@@ -40,9 +40,10 @@ const results = await page.evaluate((DAYS) => {
       const armies = [...sim.armies.values()];
       const badArmy = armies.some((a) => !Number.isFinite(a.men) || a.men < 0 || !Number.isFinite(a.equipment));
       const owned = sim.provincesOf(p.id).length;
+      const capitalsOk = era.nations.every((n) => sim.world.provinces.some((q) => q.capitalOf === n.id));
       const alive = [...sim.nations.values()].filter((n) => n.alive).map((n) => n.id);
       out.push({
-        era: era.id, nation: nation.id, days: sim.day, ms: Math.round(performance.now() - t0), prompts, logs, nan, badArmy, owned,
+        era: era.id, nation: nation.id, capitalsOk, days: sim.day, ms: Math.round(performance.now() - t0), prompts, logs, nan, badArmy, owned,
         techs: p.techs.size, steel: Math.round(p.steel), mun: Math.round(p.munitions), stab: Math.round(p.stability), armies: armies.length,
         alive: alive.join(','), gameOver: gameOver && gameOver.reason, warEvents: wars.length, sampleWar: wars.slice(-2),
       });
