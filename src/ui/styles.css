@@ -183,6 +183,7 @@ kbd { font-family: var(--font-mono); background: rgba(255,255,255,0.1); border: 
 .modal .head p { color: var(--muted); margin: 6px 0 0; font-size: 14px; }
 .modal .content { padding: 20px 28px; }
 .modal .foot { padding: 16px 28px 22px; border-top: 1px solid var(--line); display: flex; gap: 10px; justify-content: flex-end; align-items: center; }
+.modal .foot .btn { white-space: nowrap; }
 .vs { display: grid; grid-template-columns: 1fr auto 1fr; gap: 20px; align-items: center; }
 .vs .side { padding: 14px; border-radius: 6px; background: rgba(255,255,255,0.03); border: 1px solid var(--line); }
 .vs .side .flag { width: 36px; height: 24px; border-radius: 2px; margin-bottom: 8px; }
