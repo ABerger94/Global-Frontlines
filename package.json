@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "smoke": "node scripts/smoke.mjs",
+    "mobile": "node scripts/mobile.mjs",
     "simtest": "node scripts/simtest.mjs"
   },
   "dependencies": {

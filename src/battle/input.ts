@@ -2,6 +2,23 @@ import * as THREE from 'three';
 
 export class Input {
   private keys = new Set<string>();
+  /** Buttons and keys driven by the on-screen controls. */
+  private virtualKeys = new Set<string>();
+  private virtualPressed = new Set<string>();
+  private virtualButtons = new Set<number>();
+  private virtualButtonPressed = new Set<number>();
+  /** Analog movement from a thumbstick: x = strafe, y = forward. */
+  stick = { x: 0, y: 0 };
+  /** True while the look area is being dragged, so the game can skip pointer lock. */
+  touchLook = false;
+  private touchLookEnding = false;
+  /** Screen-space drag for map-style views, in pixels this frame. */
+  dragX = 0;
+  dragY = 0;
+  /** Relative pinch change this frame (positive = zoom in). */
+  pinchDelta = 0;
+  /** A completed tap, in normalised device coordinates. */
+  tap: { x: number; y: number; button: number } | null = null;
   private pressedKeys = new Set<string>();
   private buttons = new Set<number>();
   private pressedButtons = new Set<number>();
@@ -77,23 +94,84 @@ export class Input {
     if (document.pointerLockElement === this.canvas) document.exitPointerLock();
   }
   down(code: string): boolean {
-    return this.keys.has(code);
+    return this.keys.has(code) || this.virtualKeys.has(code);
   }
   pressed(code: string): boolean {
-    return this.pressedKeys.has(code);
+    return this.pressedKeys.has(code) || this.virtualPressed.has(code);
   }
   mouseDown(b: number): boolean {
-    return this.buttons.has(b);
+    return this.buttons.has(b) || this.virtualButtons.has(b);
   }
   mousePressed(b: number): boolean {
-    return this.pressedButtons.has(b);
+    return this.pressedButtons.has(b) || this.virtualButtonPressed.has(b);
   }
+
+  /** Movement axes, from the thumbstick when present and the keyboard otherwise. */
+  moveAxis(): { x: number; y: number } {
+    let x = this.stick.x;
+    let y = this.stick.y;
+    if (this.down('KeyW')) y += 1;
+    if (this.down('KeyS')) y -= 1;
+    if (this.down('KeyD')) x += 1;
+    if (this.down('KeyA')) x -= 1;
+    const len = Math.hypot(x, y);
+    if (len > 1) {
+      x /= len;
+      y /= len;
+    }
+    return { x, y };
+  }
+
+  // ---- driven by the on-screen controls
+  setVirtualKey(code: string, down: boolean) {
+    if (down) {
+      if (!this.virtualKeys.has(code)) this.virtualPressed.add(code);
+      this.virtualKeys.add(code);
+    } else this.virtualKeys.delete(code);
+  }
+  tapVirtualKey(code: string) {
+    this.virtualPressed.add(code);
+  }
+  setVirtualButton(b: number, down: boolean) {
+    if (down) {
+      if (!this.virtualButtons.has(b)) this.virtualButtonPressed.add(b);
+      this.virtualButtons.add(b);
+    } else this.virtualButtons.delete(b);
+  }
+  addLook(dx: number, dy: number) {
+    this.mouseDX += dx;
+    this.mouseDY += dy;
+  }
+  /**
+   * End a touch look drag. The flag survives until the end of the next frame so a
+   * flick that lifts off before the frame renders still turns the camera.
+   */
+  endTouchLook() {
+    this.touchLookEnding = true;
+  }
+  clearVirtual() {
+    this.virtualKeys.clear();
+    this.virtualButtons.clear();
+    this.stick.x = 0;
+    this.stick.y = 0;
+  }
+
   endFrame() {
     this.pressedKeys.clear();
     this.pressedButtons.clear();
+    this.virtualPressed.clear();
+    this.virtualButtonPressed.clear();
     this.mouseDX = 0;
     this.mouseDY = 0;
     this.wheel = 0;
+    this.dragX = 0;
+    this.dragY = 0;
+    this.pinchDelta = 0;
+    this.tap = null;
+    if (this.touchLookEnding) {
+      this.touchLook = false;
+      this.touchLookEnding = false;
+    }
   }
   dispose() {
     for (const [t, type, fn] of this.handlers) t.removeEventListener(type, fn);

@@ -169,10 +169,9 @@ export class Tank implements Combatant {
   /** Player control: WASD drive, mouse turret, LMB cannon, RMB MG. Camera third person. */
   controlUpdate(dt: number, input: Input, camera: THREE.PerspectiveCamera, camPitchRef: { yaw: number; pitch: number }) {
     if (!this.alive) return;
-    const f = (input.down('KeyW') ? 1 : 0) - (input.down('KeyS') ? 1 : 0);
-    const t = (input.down('KeyA') ? 1 : 0) - (input.down('KeyD') ? 1 : 0);
-    this.drive(dt, f, t);
-    if (input.locked) {
+    const axis = input.moveAxis();
+    this.drive(dt, axis.y, -axis.x);
+    if (input.locked || input.touchLook) {
       camPitchRef.yaw -= input.mouseDX * 0.0022;
       camPitchRef.pitch = clamp(camPitchRef.pitch - input.mouseDY * 0.0022, -0.5, 0.9);
     }

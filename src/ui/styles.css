@@ -14,13 +14,15 @@
   --font-mono: 'Share Tech Mono', monospace;
 }
 * { box-sizing: border-box; }
-html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font-family: var(--font-body); overflow: hidden; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font-family: var(--font-body); overflow: hidden; overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
+#gl { touch-action: none; }
 #app { position: fixed; inset: 0; }
 #gl { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 #labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
 #ui { position: absolute; inset: 0; pointer-events: none; }
 /* Full-screen overlays stay transparent to the mouse; only real widgets catch events. */
-.menu, .setup, .loading, .modal-bg, .gameover, .report-overlay, .pointer-hint, .hud-pause { pointer-events: auto; }
+.menu, .setup, .loading, .modal-bg, .gameover, .report-overlay, .pointer-hint, .hud-pause, .touch-ui { pointer-events: auto; }
+.orientation-hint.on { pointer-events: auto; }
 button { font-family: inherit; }
 h1, h2, h3 { font-family: var(--font-display); letter-spacing: 0.04em; text-transform: uppercase; margin: 0; }
 kbd { font-family: var(--font-mono); background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 3px; padding: 0 5px; font-size: 0.85em; }
@@ -379,3 +381,142 @@ kbd { font-family: var(--font-mono); background: rgba(255,255,255,0.1); border: 
 .gameover p { color: var(--muted); max-width: 520px; font-size: 16px; }
 .pointer-hint { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.7); padding: 18px 28px; border-radius: 6px; text-align: center; font-family: var(--font-display); font-size: 20px; letter-spacing: 0.1em; z-index: 15; cursor: pointer; }
 .pointer-hint small { display: block; font-family: var(--font-body); font-size: 12px; color: var(--muted); letter-spacing: 0; margin-top: 6px; }
+
+
+/* ============================================================ touch controls */
+.touch-ui { position: absolute; inset: 0; z-index: 12; touch-action: none; user-select: none; -webkit-user-select: none; }
+.touch-ui > * { touch-action: none; }
+.tc-look-zone { position: absolute; right: 0; top: 0; width: 58%; height: 100%; }
+.tc-stick-zone { position: absolute; left: 0; bottom: 0; width: 42%; height: 72%; }
+.tc-stick-base { position: fixed; left: 0; top: 0; width: 132px; height: 132px; margin: 0; border-radius: 50%; border: 2px solid rgba(255,255,255,0.22); background: rgba(0,0,0,0.2); transform: translate(-50%, -50%); opacity: 0; transition: opacity 0.12s; pointer-events: none; }
+.tc-stick-base.active { opacity: 1; }
+.tc-stick-knob { position: absolute; left: 50%; top: 50%; width: 60px; height: 60px; border-radius: 50%; background: rgba(255,255,255,0.28); border: 2px solid rgba(255,255,255,0.55); transform: translate(-50%, -50%); }
+.tc-btn, .tc-fire { display: flex; align-items: center; justify-content: center; border-radius: 50%; background: rgba(10,14,22,0.5); border: 1px solid rgba(255,255,255,0.3); color: #fff; font-family: var(--font-display); letter-spacing: 0.06em; backdrop-filter: blur(4px); cursor: pointer; }
+.tc-btn { width: 54px; height: 54px; font-size: 14px; }
+.tc-btn.wide { width: auto; min-width: 72px; height: 42px; border-radius: 21px; padding: 0 14px; font-size: 13px; }
+.tc-btn.pressed { background: rgba(232,184,74,0.4); }
+.tc-btn.on { background: rgba(232,184,74,0.55); border-color: var(--accent); color: #1a1408; }
+.tc-btn.dim { opacity: 0.42; }
+.tc-fire { width: 104px; height: 104px; font-size: 17px; background: rgba(190,50,40,0.32); border: 2px solid rgba(255,130,110,0.7); }
+.tc-fire.pressed { background: rgba(230,70,55,0.6); }
+.tc-actions { position: absolute; right: env(safe-area-inset-right, 0px); bottom: 0; width: 300px; height: 280px; pointer-events: none; }
+.tc-actions > * { position: absolute; pointer-events: auto; }
+.tc-actions > .tc-fire { right: 14px; bottom: 90px; }
+.tc-actions > .tc-ads { right: 128px; bottom: 118px; }
+.tc-actions > :nth-child(3) { right: 20px; bottom: 20px; }   /* reload */
+.tc-actions > :nth-child(4) { right: 86px; bottom: 16px; }   /* jump */
+.tc-actions > :nth-child(5) { right: 146px; bottom: 38px; }  /* crouch */
+.tc-actions > :nth-child(6) { right: 150px; bottom: 186px; } /* sprint */
+.tc-actions > :nth-child(7) { right: 206px; bottom: 96px; }  /* medkit */
+.tc-actions > :nth-child(8) { right: 210px; bottom: 156px; } /* grenade */
+.tc-actions > :nth-child(9) { right: 218px; bottom: 216px; } /* gas or night vision */
+/* utility pills sit along the top, clear of both thumbs */
+.tc-support { position: absolute; left: calc(12px + env(safe-area-inset-left, 0px)); top: 62px; display: flex; gap: 8px; }
+.tc-squad { position: absolute; left: calc(12px + env(safe-area-inset-left, 0px)); top: 112px; display: flex; gap: 8px; }
+.tc-sys { position: absolute; right: calc(16px + env(safe-area-inset-right, 0px)); top: 12px; display: flex; gap: 10px; }
+.tc-mapbar { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); display: none; gap: 8px; }
+.touch-ui.mode-commander .tc-mapbar { display: flex; }
+.touch-ui.mode-commander .tc-look-zone { width: 100%; }
+.touch-ui.mode-commander .tc-stick-zone,
+.touch-ui.mode-commander .tc-actions,
+.touch-ui.mode-commander .tc-support,
+.touch-ui.mode-commander .tc-squad { display: none; }
+.touch-ui.mode-tank .tc-actions > :nth-child(n+3) { display: none; }
+.is-touch .hud-killfeed { top: 76px; }
+.is-touch .hud-minimap { width: 132px; height: 132px; }
+.is-touch .hud-support { display: none; }
+.is-touch .hud-cmdhelp { display: none !important; }
+
+.orientation-hint { position: absolute; inset: 0; z-index: 60; display: none; align-items: center; justify-content: center; background: #05070d; text-align: center; }
+.orientation-hint.on { display: flex; }
+.orientation-hint h2 { font-size: 26px; color: var(--accent); }
+.orientation-hint p { color: var(--muted); }
+
+/* ============================================================ small screens */
+@media (max-width: 900px), (max-height: 560px) {
+  .menu-title { padding: 24px 20px 0; }
+  .menu-title h1 { font-size: 32px; }
+  .menu-title p { font-size: 11px; letter-spacing: 0.15em; }
+  .menu-body { flex-direction: column; align-items: stretch; padding: 0 20px 20px; gap: 14px; overflow: auto; }
+  .menu-main { min-width: 0; }
+  .menu-main .btn { font-size: 17px; padding: 11px 16px; }
+  .menu-side { font-size: 13px; max-width: none; }
+  .menu-footer { padding: 0 20px 12px; font-size: 10px; flex-direction: column; gap: 2px; }
+  .setup-head { padding: 14px 16px 10px; gap: 10px; flex-wrap: wrap; }
+  .setup-head h2 { font-size: 20px; }
+  .setup-head .steps { font-size: 10px; gap: 10px; }
+  .setup-body { padding: 14px 16px; }
+  .cards { grid-template-columns: 1fr; gap: 12px; }
+  .card { padding: 16px; }
+  .card h3 { font-size: 20px; }
+  .setup-foot { padding: 12px 16px calc(16px + env(safe-area-inset-bottom, 0px)); }
+  .btn.big { font-size: 15px; padding: 10px 18px; }
+
+  .topbar { height: auto; min-height: 52px; flex-wrap: nowrap; gap: 8px; padding: 6px 8px; padding-top: calc(6px + env(safe-area-inset-top, 0px)); }
+  .topbar .nation b { display: none; }
+  .topbar .nation { padding-right: 8px; }
+  .topbar .res { overflow-x: auto; scrollbar-width: none; gap: 12px; flex: 1; }
+  .topbar .res::-webkit-scrollbar { display: none; }
+  .topbar .date small { display: none; }
+  .topbar .date b { font-size: 13px; }
+  .tabs { gap: 2px; }
+  .tabs .btn { padding: 6px 8px; font-size: 11px; }
+  .speed button { width: 26px; height: 26px; }
+
+  /* panels become bottom sheets so they never run off the screen */
+  .province-panel, .side-panel { left: 8px; right: 8px; width: auto; top: auto; bottom: calc(8px + env(safe-area-inset-bottom, 0px)); max-height: 54vh; display: flex; flex-direction: column; }
+  .strat.log-collapsed .province-panel { max-height: 54vh; }
+  .province-panel .body, .side-panel .body { overflow-y: auto; }
+  .strat.tab-open .province-panel { display: none; }
+  .tech-grid { grid-template-columns: 1fr; }
+  .stock { grid-template-columns: repeat(2, 1fr); }
+  .log { left: 8px; right: 8px; width: auto; bottom: calc(8px + env(safe-area-inset-bottom, 0px)); }
+  .log-body { max-height: 130px; }
+  .strat.tab-open .log, .strat.sheet-open .log { display: none; }
+  .bottom-hint { display: none; }
+
+  .modal { width: 100%; max-width: 100vw; max-height: 100vh; border-radius: 0; }
+  .modal .head { padding: 14px 16px 10px; }
+  .modal .head h2 { font-size: 22px; }
+  .modal .content { padding: 14px 16px; }
+  .modal .foot { padding: 12px 16px calc(14px + env(safe-area-inset-bottom, 0px)); flex-wrap: wrap; }
+  .modal .foot .muted { display: none; }
+  .vs { grid-template-columns: 1fr; gap: 10px; }
+  .vs .mid { display: none; }
+  .mods { grid-template-columns: 1fr 1fr; }
+  .roles, .roles.diff { grid-template-columns: 1fr 1fr; }
+  .kits { grid-template-columns: 1fr 1fr; }
+  .choice small { display: none; }
+  .report { width: 100%; border-radius: 0; }
+  .report-grid { grid-template-columns: 1fr 1fr; }
+  .report-head h1 { font-size: 34px; }
+  .globe-label.provname, .globe-label.country { display: none; }
+  .pause-box { width: auto; margin: 12px; padding: 18px; }
+  .pause-controls { display: none; }
+  .hud-tickets b { font-size: 22px; }
+  .hud-minimap { display: none; }
+  .hud-support { display: none; }
+  .hud-br { right: auto; left: 50%; transform: translateX(-50%); bottom: 6px; text-align: center; }
+  .hud-ammo b { font-size: 26px; }
+  .hud-weapon { font-size: 11px; }
+  .hud-bl { left: 12px; bottom: 12px; }
+  .hud-compass { top: 112px; width: 200px; }
+  .obj { width: 34px; height: 34px; font-size: 15px; }
+}
+
+
+/* Very narrow (phone portrait): the top bar becomes three compact rows so
+   nothing is pushed off the edge. */
+@media (max-width: 620px) {
+  .topbar { flex-wrap: wrap; height: auto; row-gap: 4px; }
+  .topbar .nation { order: 0; }
+  .topbar .date { order: 1; margin-left: auto; }
+  .speed { order: 2; }
+  .tabs { order: 3; flex-basis: 100%; justify-content: space-between; }
+  .tabs .btn { flex: 1; text-align: center; padding: 6px 4px; }
+  .topbar .res { order: 4; flex-basis: 100%; flex: none; width: 100%; padding-bottom: 2px; }
+  .province-panel, .side-panel { max-height: 46vh; }
+  .mods, .roles, .roles.diff, .kits { grid-template-columns: 1fr; }
+  .report-grid { grid-template-columns: 1fr; }
+  .report-grid div { border-right: none; border-bottom: 1px solid var(--line); }
+}

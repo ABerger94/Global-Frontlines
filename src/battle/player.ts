@@ -394,7 +394,7 @@ export class Player implements Combatant {
       if (this.pos.distanceTo(gc.pos) < gc.radius && !this.maskOn) this.takeDamage(7 * gc.strength * dt, null);
     }
     // look
-    if (this.controlEnabled && input.locked) {
+    if (this.controlEnabled && (input.locked || input.touchLook)) {
       const sens = 0.0021 * (this.ads ? lerp(1, 0.55, this.adsAmount) : 1);
       this.yaw -= input.mouseDX * sens;
       this.pitch -= input.mouseDY * sens;
@@ -409,17 +409,17 @@ export class Player implements Combatant {
     const fwd = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
     const right = new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
     const wish = new THREE.Vector3();
+    let moveAmount = 0;
     if (this.controlEnabled) {
-      if (input.down('KeyW')) wish.add(fwd);
-      if (input.down('KeyS')) wish.sub(fwd);
-      if (input.down('KeyD')) wish.add(right);
-      if (input.down('KeyA')) wish.sub(right);
+      const axis = input.moveAxis();
+      moveAmount = Math.hypot(axis.x, axis.y);
+      wish.addScaledVector(fwd, axis.y).addScaledVector(right, axis.x);
     }
     const wantCrouch = this.controlEnabled && (input.down('ControlLeft') || input.down('KeyC'));
     this.crouching = wantCrouch;
-    this.sprinting = this.controlEnabled && input.down('ShiftLeft') && wish.lengthSq() > 0 && !this.crouching && !this.ads;
+    this.sprinting = this.controlEnabled && input.down('ShiftLeft') && moveAmount > 0.85 && !this.crouching && !this.ads;
     const speed = (this.crouching ? 2.4 : this.sprinting ? 7.2 : 4.8) * (this.ads ? 0.7 : 1) * (this.maskOn ? 0.9 : 1);
-    if (wish.lengthSq() > 0) wish.normalize().multiplyScalar(speed);
+    if (wish.lengthSq() > 0) wish.normalize().multiplyScalar(speed * Math.min(1, moveAmount));
     const accel = this.grounded ? 12 : 3;
     this.vel.x += (wish.x - this.vel.x) * Math.min(1, dt * accel);
     this.vel.z += (wish.z - this.vel.z) * Math.min(1, dt * accel);
@@ -444,7 +444,7 @@ export class Player implements Combatant {
       this.grounded = true;
     } else this.grounded = false;
     this.pos.copy(next);
-    this.moving = wish.lengthSq() > 0.1 && this.grounded;
+    this.moving = moveAmount > 0.1 && this.grounded;
     this.lastGroundY = ground;
     // actions
     const w = this.weapon;
@@ -464,7 +464,7 @@ export class Player implements Combatant {
       if (input.pressed('KeyH')) this.useMedkit();
       if (input.pressed('KeyG') && this.cfg.hasMask) this.maskOn = !this.maskOn;
       if (input.pressed('KeyN') && this.cfg.hasNVG) this.nvgOn = !this.nvgOn;
-      if (input.locked) this.tryFire(now, dt);
+      if (input.locked || input.touchLook || input.mouseDown(0)) this.tryFire(now, dt);
     } else this.ads = false;
     this.adsAmount += ((this.ads ? 1 : 0) - this.adsAmount) * Math.min(1, dt * 12);
     if (w.reloadTimer > 0) {
