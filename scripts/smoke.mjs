@@ -26,6 +26,13 @@ const ALLTECH = process.env.ALLTECH === '1';
 const OUT = process.env.OUT || 'scripts/out';
 mkdirSync(OUT, { recursive: true });
 const shot = (name) => page.screenshot({ path: `${OUT}/${name}.png` });
+// Advancing days during UI tests can trigger a battle prompt whose modal blocks clicks.
+const clearPrompt = async () => {
+  if (await page.$('[data-battle=auto]')) {
+    await page.click('[data-battle=auto]');
+    await page.waitForTimeout(400);
+  }
+};
 const server = spawn('npx', ['vite', 'preview', '--port', String(PORT), '--strictPort'], { stdio: 'pipe', detached: true });
 await new Promise((r) => setTimeout(r, 2500));
 const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH || chromePath(), args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
@@ -127,6 +134,100 @@ try {
       if (!moving) errors.push('clicking a destination after selecting an army did not issue a move order: ' + JSON.stringify({ target, diag }));
     }
   }
+  await page.evaluate(() => window.__gf.stratUI.selectProvince(null));
+
+  // --- panels must keep their scroll position while the simulation ticks
+  await page.click('[data-tab=diplomacy]');
+  await page.waitForTimeout(400);
+  const scrollTest = await page.evaluate(async () => {
+    const app = window.__gf;
+    const body = document.querySelector('.side-panel .body');
+    const scrollable = body.scrollHeight > body.clientHeight + 10;
+    body.scrollTop = 140;
+    const set = body.scrollTop;
+    // simulate several days: each emits the events that used to rebuild the panel
+    for (let i = 0; i < 6; i++) {
+      app.sim.tickDay();
+      app.sim.events.emit('dirty');
+    }
+    await new Promise((r) => setTimeout(r, 700));
+    const after = document.querySelector('.side-panel .body');
+    return { scrollable, set, kept: after.scrollTop, sameNode: after === body };
+  });
+  console.log('side panel scroll', scrollTest);
+  if (!scrollTest.scrollable) errors.push('diplomacy panel did not overflow, scroll test is meaningless');
+  if (Math.abs(scrollTest.kept - scrollTest.set) > 4) errors.push(`side panel scroll jumped: set ${scrollTest.set}, kept ${scrollTest.kept}`);
+  await clearPrompt();
+  await page.click('[data-act=closeTab]');
+
+  // --- a big stack of armies in one province must be scrollable and keep position
+  const armyScroll = await page.evaluate(async () => {
+    const app = window.__gf;
+    const sim = app.sim;
+    const cap = sim.world.provinces.find((p) => p.capitalOf === sim.playerId);
+    for (let i = 0; i < 10; i++) sim.createArmy(sim.playerId, cap.id, 12000, 0.8);
+    app.stratUI.selectProvince(cap.id);
+    await new Promise((r) => setTimeout(r, 250));
+    const rowCount = () => document.querySelectorAll('.province-panel .army-row').length;
+    const body = () => document.querySelector('.province-panel .body');
+    const rows = rowCount();
+    const scrollable = body().scrollHeight > body().clientHeight + 10;
+    body().scrollTop = 90;
+    const set = body().scrollTop;
+    // 1: the simulation ticking must not move the reader
+    for (let i = 0; i < 3; i++) sim.tickDay();
+    for (let i = 0; i < 6; i++) sim.events.emit('dirty');
+    await new Promise((r) => setTimeout(r, 700));
+    const keptOnTick = body().scrollTop;
+    // 2: nor must the list itself changing underneath them
+    const before = rowCount();
+    sim.createArmy(sim.playerId, cap.id, 9000, 0.8);
+    sim.events.emit('dirty');
+    await new Promise((r) => setTimeout(r, 500));
+    return { rows, scrollable, set, keptOnTick, keptOnChange: body().scrollTop, grew: rowCount() > before };
+  });
+  console.log('army list scroll', armyScroll);
+  if (armyScroll.rows < 10) errors.push('army list did not show the whole stack: ' + armyScroll.rows);
+  if (!armyScroll.scrollable) errors.push('army list did not become scrollable with 10 armies');
+  if (Math.abs(armyScroll.keptOnTick - armyScroll.set) > 4) errors.push(`army list scroll jumped on a sim tick: ${armyScroll.set} -> ${armyScroll.keptOnTick}`);
+  if (Math.abs(armyScroll.keptOnChange - armyScroll.set) > 4) errors.push(`army list scroll jumped when an army arrived: ${armyScroll.set} -> ${armyScroll.keptOnChange}`);
+  if (!armyScroll.grew) errors.push('army list did not pick up the new army');
+  await clearPrompt();
+  await shot('04d-army-list');
+
+  // --- the war log collapses, remembers it, and never covers the side panel
+  await page.click('[data-tab=research]');
+  await page.waitForTimeout(300);
+  const logTest = await page.evaluate(async () => {
+    const overlap = () => {
+      const a = document.querySelector('.log').getBoundingClientRect();
+      const b = document.querySelector('.side-panel').getBoundingClientRect();
+      return !(a.right < b.left || b.right < a.left || a.bottom < b.top || b.bottom < a.top);
+    };
+    const before = overlap();
+    document.querySelector('.log-head').click();
+    await new Promise((r) => setTimeout(r, 150));
+    const collapsed = document.querySelector('.log').classList.contains('collapsed');
+    const stored = localStorage.getItem('gf.logCollapsed');
+    document.querySelector('.log-head').click();
+    await new Promise((r) => setTimeout(r, 150));
+    return { overlapsSidePanel: before, collapsed, stored, reopened: !document.querySelector('.log').classList.contains('collapsed'), entries: document.querySelectorAll('.log .entry').length };
+  });
+  console.log('war log', logTest);
+  const noise = await page.evaluate(async () => {
+    const app = window.__gf;
+    for (let i = 0; i < 5; i++) app.stratUI.log('Empire of Japan\'s assault on Beijing is repulsed.', 'war');
+    app.stratUI.log('A quiet day on the front.', 'info');
+    await new Promise((r) => setTimeout(r, 100));
+    const rows = [...document.querySelectorAll('.log .entry')].map((e) => e.textContent);
+    return { repeated: rows.filter((t) => t.includes('Beijing')).length, hasCount: rows.some((t) => t.includes('×5')), toasts: document.querySelectorAll('.toast').length };
+  });
+  console.log('log noise', noise);
+  if (noise.repeated !== 1 || !noise.hasCount) errors.push('repeated reports were not collapsed: ' + JSON.stringify(noise));
+  if (noise.toasts > 0) errors.push('a foreign skirmish raised a banner: ' + noise.toasts);
+  if (logTest.overlapsSidePanel) errors.push('war log overlaps the side panel');
+  if (!logTest.collapsed || logTest.stored !== '1' || !logTest.reopened) errors.push('war log collapse toggle is broken: ' + JSON.stringify(logTest));
+  await page.click('[data-act=closeTab]');
   await page.evaluate(() => window.__gf.stratUI.selectProvince(null));
   await page.evaluate(() => {
     const app = window.__gf;

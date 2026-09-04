@@ -41,6 +41,11 @@ export class StrategyUI {
   speed = 1;
   private lastHover: number | null = null;
   private unsub: (() => void)[] = [];
+  private logEntries: { msg: string; kind: LogKind; date: string; count: number }[] = [];
+  private logCollapsed = false;
+  private logUnread = 0;
+  private toastHost: HTMLElement;
+  private pendingRefresh: number | null = null;
 
   constructor(readonly host: HTMLElement, readonly sim: StrategySim, readonly globe: GlobeScene, readonly cb: StrategyUICallbacks) {
     this.root = document.createElement('div');
@@ -56,13 +61,21 @@ export class StrategyUI {
     this.sidePanel.style.display = 'none';
     this.logEl = document.createElement('div');
     this.logEl.className = 'log';
+    try {
+      this.logCollapsed = localStorage.getItem('gf.logCollapsed') === '1';
+    } catch {
+      /* private browsing */
+    }
+    this.toastHost = document.createElement('div');
+    this.toastHost.className = 'toasts';
     this.hint = document.createElement('div');
     this.hint.className = 'bottom-hint';
     this.hint.textContent = 'Drag to rotate · Scroll to zoom · Click a province to inspect it · Space to pause';
     this.modalHost = document.createElement('div');
-    this.root.append(this.topbar, this.provincePanel, this.sidePanel, this.logEl, this.hint, this.modalHost);
+    this.root.append(this.topbar, this.provincePanel, this.sidePanel, this.logEl, this.toastHost, this.hint, this.modalHost);
+    this.renderLog();
     this.unsub.push(sim.events.on('log', (m, k) => this.log(m, k)));
-    this.unsub.push(sim.events.on('dirty', () => this.refresh()));
+    this.unsub.push(sim.events.on('dirty', () => this.scheduleRefresh()));
     this.unsub.push(sim.events.on('day', () => this.renderTopbar()));
     this.root.addEventListener('click', (e) => this.onClick(e));
     this.root.addEventListener('input', (e) => this.onInput(e));
@@ -79,6 +92,32 @@ export class StrategyUI {
   }
 
   // ---------------------------------------------------------------- rendering
+  /** Coalesce simulation-driven redraws; user actions still refresh immediately. */
+  private scheduleRefresh() {
+    if (this.pendingRefresh !== null) return;
+    this.pendingRefresh = window.setTimeout(() => {
+      this.pendingRefresh = null;
+      this.refresh();
+    }, 220);
+  }
+
+  /**
+   * Replace a panel's markup while keeping the reader where they were.
+   * Rebuilding innerHTML resets scrollTop, which is why these panels used to
+   * jump back to the top whenever the simulation ticked.
+   */
+  private renderInto(panel: HTMLElement, html: string, identity: string) {
+    const body = panel.querySelector('.body') as HTMLElement | null;
+    const same = panel.dataset.identity === identity;
+    // never yank a slider out from under the mouse
+    if (same && panel.contains(document.activeElement) && (document.activeElement as HTMLElement)?.tagName === 'INPUT') return;
+    const scroll = same && body ? body.scrollTop : 0;
+    panel.innerHTML = html;
+    panel.dataset.identity = identity;
+    const next = panel.querySelector('.body') as HTMLElement | null;
+    if (next && scroll) next.scrollTop = scroll;
+  }
+
   refresh() {
     this.renderTopbar();
     this.renderProvince();
@@ -140,8 +179,10 @@ export class StrategyUI {
         <span>Garrison</span><b>${fmtNum(p.garrison)} men</b>
       </div>`;
       if (armies.length || moving.length) {
-        html += `<div class="section-title">Armies present</div>`;
-        for (const a of [...armies, ...moving]) html += this.armyRow(a);
+        const all = [...armies, ...moving];
+        html += `<div class="section-title">Armies present <span class="muted">${all.length}</span></div><div class="army-list">`;
+        for (const a of all) html += this.armyRow(a);
+        html += `</div>`;
       }
       if (mine) {
         html += `<div class="actions">
@@ -159,7 +200,8 @@ export class StrategyUI {
       if (moving.length) for (const a of moving) html += this.armyRow(a);
     }
     html += '</div>';
-    this.provincePanel.innerHTML = html;
+    // identity is the province alone: armies arriving or leaving must not dump the reader at the top
+    this.renderInto(this.provincePanel, html, `p${p.id}`);
     this.provincePanel.style.display = '';
   }
 
@@ -255,7 +297,7 @@ export class StrategyUI {
       }
       html += '</div>';
     }
-    this.sidePanel.innerHTML = html;
+    this.renderInto(this.sidePanel, html, this.activeTab ?? '');
     this.sidePanel.style.display = '';
   }
 
@@ -317,6 +359,9 @@ export class StrategyUI {
       return;
     }
     switch (el.dataset.act) {
+      case 'toggleLog':
+        this.toggleLog();
+        break;
       case 'menu':
         this.cb.onMenu();
         break;
@@ -417,16 +462,67 @@ export class StrategyUI {
   }
 
   log(msg: string, kind: LogKind = 'info') {
-    const e = document.createElement('div');
-    e.className = 'entry ' + kind;
-    e.innerHTML = `<small>${this.sim.dateString()}</small>${msg}`;
-    this.logEl.appendChild(e);
-    while (this.logEl.children.length > 7) this.logEl.firstElementChild!.remove();
-    setTimeout(() => {
-      e.style.transition = 'opacity 1s';
-      e.style.opacity = '0';
-      setTimeout(() => e.remove(), 1000);
-    }, 14000);
+    const last = this.logEntries[this.logEntries.length - 1];
+    if (last && last.msg === msg) {
+      // a stalled front repeats the same report for days; collapse it into one row
+      last.count++;
+      last.date = this.sim.dateString();
+      this.renderLog();
+      return;
+    }
+    this.logEntries.push({ msg, kind, date: this.sim.dateString(), count: 1 });
+    if (this.logEntries.length > 80) this.logEntries.shift();
+    if (this.logCollapsed) this.logUnread++;
+    this.renderLog();
+    if (this.isImportant(msg, kind)) this.toast(msg, kind);
+  }
+
+  /** Banners are for the player's own war, not for every skirmish on Earth. */
+  private isImportant(msg: string, kind: LogKind): boolean {
+    if (kind === 'bad') return true;
+    const me = this.sim.player.def;
+    const mine = msg.includes(me.name) || msg.includes(me.adjective);
+    if (mine && (kind === 'war' || kind === 'good')) return true;
+    return this.sim.era.politics.events.some((e) => msg.startsWith(e.title));
+  }
+
+  private toast(msg: string, kind: LogKind) {
+    const el = document.createElement('div');
+    el.className = 'toast ' + kind;
+    el.textContent = msg;
+    this.toastHost.appendChild(el);
+    while (this.toastHost.children.length > 2) this.toastHost.firstElementChild!.remove();
+    setTimeout(() => el.classList.add('out'), 4200);
+    setTimeout(() => el.remove(), 4800);
+  }
+
+  private renderLog() {
+    const body = this.logEl.querySelector('.log-body') as HTMLElement | null;
+    // keep following new entries only when the reader is already at the bottom
+    const atBottom = !body || body.scrollHeight - body.scrollTop - body.clientHeight < 24;
+    const scroll = body ? body.scrollTop : 0;
+    const rows = this.logEntries
+      .slice(-60)
+      .map((e) => `<div class="entry ${e.kind}"><small>${e.date}</small>${e.msg}${e.count > 1 ? `<i class="rep">×${e.count}</i>` : ''}</div>`)
+      .join('');
+    this.logEl.className = 'log' + (this.logCollapsed ? ' collapsed' : '');
+    this.root.classList.toggle('log-collapsed', this.logCollapsed);
+    this.logEl.innerHTML = `<div class="log-head" data-act="toggleLog"><b>War Log</b>${this.logUnread ? `<span class="badge">${this.logUnread}</span>` : ''}<span class="chev">${this.logCollapsed ? '▴' : '▾'}</span></div><div class="log-body">${rows || '<div class="entry muted">No reports yet.</div>'}</div>`;
+    if (!this.logCollapsed) {
+      const nb = this.logEl.querySelector('.log-body') as HTMLElement;
+      nb.scrollTop = atBottom ? nb.scrollHeight : scroll;
+    }
+  }
+
+  private toggleLog() {
+    this.logCollapsed = !this.logCollapsed;
+    if (!this.logCollapsed) this.logUnread = 0;
+    try {
+      localStorage.setItem('gf.logCollapsed', this.logCollapsed ? '1' : '0');
+    } catch {
+      /* private browsing */
+    }
+    this.renderLog();
   }
 
   // ---------------------------------------------------------------- battle prompt
