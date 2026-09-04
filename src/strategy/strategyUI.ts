@@ -7,11 +7,12 @@ import { KIT_INFO, ROLE_INFO } from '../data/eras';
 import { WEAPONS } from '../data/weapons';
 import { fmtNum } from '../core/math';
 import { audio } from '../audio/audio';
+import { DIFFICULTIES, DEFAULT_DIFFICULTY } from '../battle/difficulty';
 
 export interface StrategyUICallbacks {
   onMenu: () => void;
   onAutoResolve: (ctx: BattleContext) => void;
-  onTakeCommand: (ctx: BattleContext, role: RoleId, kit: KitId) => void;
+  onTakeCommand: (ctx: BattleContext, role: RoleId, kit: KitId, difficulty: string) => void;
 }
 
 export function flagStyle(n: NationDef | undefined | null): string {
@@ -431,6 +432,12 @@ export class StrategyUI {
   // ---------------------------------------------------------------- battle prompt
   showBattlePrompt(ctx: BattleContext) {
     const sim = this.sim;
+    let savedDifficulty = DEFAULT_DIFFICULTY;
+    try {
+      savedDifficulty = localStorage.getItem('gf.difficulty') ?? DEFAULT_DIFFICULTY;
+    } catch {
+      /* private browsing */
+    }
     const p = sim.world.provinces[ctx.provinceId];
     const atk = sim.nations.get(ctx.attacker)!;
     const def = sim.nations.get(ctx.defender);
@@ -462,6 +469,8 @@ export class StrategyUI {
         <div id="deploy" style="display:none">
           <div class="section-title">Choose your role</div>
           <div class="roles">${(['commander', 'squadleader', 'soldier'] as RoleId[]).map((r) => `<div class="choice ${r === 'soldier' ? 'on' : ''}" data-role="${r}"><b>${ROLE_INFO[r].name}</b><small>${ROLE_INFO[r].desc}</small></div>`).join('')}</div>
+          <div class="section-title">Combat difficulty</div>
+          <div class="roles diff">${DIFFICULTIES.map((d) => `<div class="choice ${d.id === savedDifficulty ? 'on' : ''}" data-diff="${d.id}"><b>${d.name}</b><small>${d.desc}</small></div>`).join('')}</div>
           <div class="section-title">Choose your kit</div>
           <div class="kits">${sim.era.kits.map((k) => {
             const unlocked = s.kits.includes(k);
@@ -481,11 +490,20 @@ export class StrategyUI {
     </div></div>`;
     let role: RoleId = 'soldier';
     let kit: KitId = 'rifleman';
+    let difficulty = savedDifficulty;
     host.querySelector('.modal')!.addEventListener('click', (e) => {
-      const el = (e.target as HTMLElement).closest('[data-battle],[data-role],[data-kit]') as HTMLElement | null;
+      const el = (e.target as HTMLElement).closest('[data-battle],[data-role],[data-kit],[data-diff]') as HTMLElement | null;
       if (!el) return;
       audio.click();
-      if (el.dataset.role) {
+      if (el.dataset.diff) {
+        difficulty = el.dataset.diff;
+        try {
+          localStorage.setItem('gf.difficulty', difficulty);
+        } catch {
+          /* private browsing */
+        }
+        host.querySelectorAll('[data-diff]').forEach((x) => x.classList.toggle('on', x === el));
+      } else if (el.dataset.role) {
         role = el.dataset.role as RoleId;
         host.querySelectorAll('[data-role]').forEach((x) => x.classList.toggle('on', x === el));
       } else if (el.dataset.kit) {
@@ -501,7 +519,7 @@ export class StrategyUI {
         (host.querySelector('[data-battle=deploy]') as HTMLElement).style.display = '';
       } else if (el.dataset.battle === 'deploy') {
         host.innerHTML = '';
-        this.cb.onTakeCommand(ctx, role, kit);
+        this.cb.onTakeCommand(ctx, role, kit, difficulty);
       }
     });
   }

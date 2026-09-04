@@ -172,12 +172,24 @@ try {
   await shot('07-battle-prompt');
   await page.click('[data-battle=command]');
   await page.waitForTimeout(300);
+  const diffCount = await page.$$eval('[data-diff]', (els) => els.length);
+  if (diffCount !== 4) errors.push('deploy panel is missing the difficulty selector: ' + diffCount);
+  await page.click('[data-diff=recruit]');
+  const chosen = await page.evaluate(() => localStorage.getItem('gf.difficulty'));
+  if (chosen !== 'recruit') errors.push('difficulty choice was not remembered: ' + chosen);
   await page.click(`[data-role=${ROLE}]`);
   await page.click(`[data-kit=${KIT}]`);
   await shot('08-deploy');
   await page.click('[data-battle=deploy]');
   await page.waitForSelector('.hud', { timeout: 30000 });
   await page.waitForTimeout(6000);
+  const combat = await page.evaluate(() => {
+    const b = window.__gf.battle;
+    return { difficulty: b.world.difficulty.id, cap: b.world.difficulty.maxAttackers, attackers: b.world.playerAttackers.size, hp: Math.round(b.player.hp) };
+  });
+  console.log('combat state', combat);
+  if (combat.difficulty !== 'recruit') errors.push('battle did not use the chosen difficulty: ' + combat.difficulty);
+  if (combat.attackers > combat.cap) errors.push('more enemies engaged the player than the cap allows');
   await shot('09-battle');
   const battleHit = await page.evaluate(() => document.elementFromPoint(720, 450)?.id || document.elementFromPoint(720, 450)?.className);
   console.log('battle element under cursor', battleHit);

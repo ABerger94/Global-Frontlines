@@ -73,6 +73,22 @@ The headless smoke test uses `playwright-core` and needs a Chromium binary. Set 
 | `Tab` | Command map: select squads, right-click to order, `Z`+click artillery, `X`+click air |
 | `Esc` | Pause / withdraw |
 
+**Difficulty.** Before deploying you pick a combat difficulty, remembered between battles. It controls
+how quickly enemies spot and settle their aim on you, how far they engage from, how many of them may
+shoot at you at once, how hard they hit, and how fast you recover between firefights.
+
+| | Recruit | Regular | Veteran | Elite |
+| --- | --- | --- | --- | --- |
+| Enemies shooting at you at once | 2 | 3 | 4 | 8 |
+| Time to aim at you | 1.7 s | 1.2 s | 0.7 s | 0.35 s |
+| Damage you take | 45% | 60% | 85% | 100% |
+| Health regen | fast | steady | slow | none |
+
+Enemy AI engages at believable ranges (about 150 m with a rifle, 60 m with a submachine gun) rather than
+across the whole map, needs a moment to bring its weapon to bear on a new contact, shoots worse while
+suppressed or moving, and gives you a grace period after you redeploy. A red wedge around the crosshair
+shows the bearing of whoever hit you.
+
 Capture **A**, **B** and **C**. Holding more objectives than the enemy bleeds their tickets. Time keeps
 passing on the globe while you fight (one day every 30 seconds), so a friendly army arriving at the
 contested province shows up as reinforcements mid-battle.

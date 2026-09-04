@@ -125,6 +125,7 @@ export class Player implements Combatant {
   kills = 0;
   deaths = 0;
   controlEnabled = true;
+  protectedUntil = 0;
   readonly viewRoot = new THREE.Group();
   private grenadeList: Grenade[] = [];
   private bob = 0;
@@ -138,11 +139,14 @@ export class Player implements Combatant {
   private switchTimer = 0;
   private eyeHeight = 1.62;
   private hurtCooldown = 0;
+  private lastDamageTime = -100;
   private lastGroundY = 0;
   private landing = 0;
   onHit: ((kill: boolean, head: boolean) => void) | null = null;
   onNotify: ((msg: string, sub?: string) => void) | null = null;
   onShot: (() => void) | null = null;
+  /** Called with the bearing of the attacker in radians (null when it is not directional). */
+  onDamage: ((bearing: number | null) => void) | null = null;
 
   constructor(readonly world: BattleWorld, readonly camera: THREE.PerspectiveCamera, readonly cfg: PlayerConfig, readonly input: Input, readonly scene: THREE.Scene) {
     this.baseFov = camera.fov;
@@ -173,6 +177,9 @@ export class Player implements Combatant {
     this.pitch = 0;
     this.hp = this.maxHp;
     this.alive = true;
+    this.lastDamageTime = this.world.time;
+    // brief grace period so redeploying into a firefight is not an instant death
+    this.protectedUntil = this.world.time + this.world.difficulty.spawnProtection;
     this.vel.set(0, 0, 0);
     for (const w of this.weapons) {
       w.jammed = false;
@@ -188,7 +195,16 @@ export class Player implements Combatant {
 
   takeDamage(amount: number, attacker: Combatant | null) {
     if (!this.alive) return;
-    this.hp -= amount;
+    if (attacker && this.world.time < this.protectedUntil) return;
+    this.hp -= amount * this.world.difficulty.playerDamage;
+    this.lastDamageTime = this.world.time;
+    if (attacker) {
+      // Angle of the shooter relative to where the player is facing, for the hit indicator.
+      const dx = attacker.pos.x - this.pos.x;
+      const dz = attacker.pos.z - this.pos.z;
+      const world = Math.atan2(dx, dz);
+      this.onDamage?.(((world - (this.yaw + Math.PI) + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
+    } else this.onDamage?.(null);
     if (this.hurtCooldown <= 0) {
       audio.hurt();
       this.hurtCooldown = 0.25;
@@ -364,6 +380,9 @@ export class Player implements Combatant {
       }
     }
     if (!this.alive) return;
+    // out-of-combat recovery: without it a single unseen rifleman ends the round
+    const regen = this.world.difficulty.regen;
+    if (regen > 0 && this.hp < this.maxHp && this.world.time - this.lastDamageTime > 5) this.hp = Math.min(this.maxHp, this.hp + regen * dt);
     // healing
     if (this.healTimer > 0) {
       const step = Math.min(dt, this.healTimer);

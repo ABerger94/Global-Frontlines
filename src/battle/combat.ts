@@ -3,6 +3,7 @@ import type { RNG } from '../core/rng';
 import type { Battlefield } from './terrain';
 import type { Effects } from './effects';
 import type { Team } from './types';
+import type { Difficulty } from './difficulty';
 
 export interface Combatant {
   id: number;
@@ -15,6 +16,8 @@ export interface Combatant {
   isVehicle: boolean;
   isPlayer: boolean;
   moving: boolean;
+  /** World time until which enemies ignore this combatant (respawn protection). */
+  protectedUntil?: number;
   crouching: boolean;
   takeDamage(amount: number, attacker: Combatant | null, headshot?: boolean): void;
 }
@@ -39,6 +42,9 @@ export interface BattleWorld {
   enemyAccuracyMult: number;
   friendlyAccuracyMult: number;
   night: boolean;
+  difficulty: Difficulty;
+  /** Ids of the enemies currently allowed to engage the player. */
+  playerAttackers: Set<number>;
   onKill(attacker: Combatant | null, victim: Combatant): void;
 }
 

@@ -115,7 +115,24 @@ A conflict prompt shows both sides, the terrain, and the supply-derived modifier
 * **Boots on the Ground** — Rifleman, Machine Gunner, Medic (heals allies, extra medkits),
   Tank Commander (drivable armour, WWII/Modern). Fighter Pilot is on the roadmap.
 
-### 4.3 Battle rules
+### 4.3 Difficulty and AI fairness
+
+The AI is deliberately handicapped against the player, because a simulation that is fair to twenty-six
+soldiers is not fair to one. Four presets (Recruit, Regular, Veteran, Elite) control:
+
+* **Engagement range.** Bots fight at weapon-appropriate ranges (rifle 150 m, DMR 190 m, LMG 140 m,
+  carbine 110 m, SMG 60 m, pistol 35 m) on a 270 m field, instead of the full ballistic range.
+* **Reaction and aim settling.** A bot that spots the player cannot fire for a reaction delay, then its
+  accuracy ramps up over the following 1.5 s. The opening round of a fresh engagement is a warning shot
+  on the lower presets.
+* **Attacker cap.** Only 2 to 8 enemies may target the player at once; the rest fight the AI squads, so
+  the player faces a firefight rather than a firing squad.
+* **Damage scaling and regeneration.** Incoming damage is scaled, and health regenerates a few seconds
+  after taking fire on all but Elite.
+* **Spotting, suppression and spawn protection.** A lone crouched player is spotted at shorter range than
+  a vehicle, bots under fire shoot 45% worse, and redeploying grants a short grace period.
+
+### 4.4 Battle rules
 * Three capture points (A/B/C) between the attacker spawn and the defender spawn.
 * Both sides have **tickets** derived from their army strength. Deaths cost tickets; holding a
   majority of points bleeds the enemy.
@@ -124,7 +141,7 @@ A conflict prompt shows both sides, the terrain, and the supply-derived modifier
   reaches the contested province during the fight, reinforcements arrive: extra tickets and a
   fresh squad. *Holding a bridge for twenty minutes really does buy your map time.*
 
-### 4.4 Strategy → FPS modifiers
+### 4.5 Strategy → FPS modifiers
 
 | Strategic state | FPS effect |
 | --- | --- |
@@ -137,7 +154,7 @@ A conflict prompt shows both sides, the terrain, and the supply-derived modifier
 | Organisation | AI ally morale (cover-seeking, retreat threshold) |
 | Terrain type | battlefield generator preset |
 
-### 4.5 FPS → Strategy
+### 4.6 FPS → Strategy
 * Victory: province captured (attacking) or held (defending); loser suffers casualties scaled to
   tickets lost.
 * Defeat: army retreats with heavy losses.

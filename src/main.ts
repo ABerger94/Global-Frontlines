@@ -119,7 +119,7 @@ class App {
       this.stratUI = new StrategyUI(this.ui, this.sim, this.globe, {
         onMenu: () => this.returnToMenu(),
         onAutoResolve: (ctx) => this.autoResolve(ctx),
-        onTakeCommand: (ctx, role, kit) => this.takeCommand(ctx, role, kit),
+        onTakeCommand: (ctx, role, kit, difficulty) => this.takeCommand(ctx, role, kit, difficulty),
       });
       this.sim.events.on('battlePrompt', (ctx) => {
         this.stratUI!.setSpeed(0);
@@ -164,7 +164,7 @@ class App {
     this.stratUI?.setSpeed(1);
   }
 
-  private takeCommand(ctx: BattleContext, role: RoleId, kit: KitId) {
+  private takeCommand(ctx: BattleContext, role: RoleId, kit: KitId, difficulty: string) {
     const sim = this.sim!;
     const p = sim.world.provinces[ctx.provinceId];
     const playerIsAttacker = ctx.attacker === sim.playerId;
@@ -203,6 +203,7 @@ class App {
       enemyTickets,
       seed: (sim.world.seed ^ (ctx.id * 7919)) >>> 0,
       night,
+      difficulty,
       onDay: () => {
         sim.tickDay();
       },

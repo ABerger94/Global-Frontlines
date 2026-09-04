@@ -20,6 +20,7 @@ import { HUD, type MinimapUnit } from './hud';
 import { Input } from './input';
 import type { BattleWorld, Combatant, GasCloud } from './combat';
 import { audio } from '../audio/audio';
+import { getDifficulty } from './difficulty';
 
 const SURNAMES: Record<string, string[]> = {
   en: ['Walker', 'Hughes', 'Bennett', 'Carter', 'Fletcher', 'Harris', 'Morgan', 'Price', 'Reid', 'Turner', 'Wallace', 'Young', 'Cooper', 'Mason', 'Ellis', 'Grant'],
@@ -153,6 +154,8 @@ export class BattleScene {
       enemyAccuracyMult: setup.supply.enemyAccuracy,
       friendlyAccuracyMult: 1,
       night: setup.night,
+      difficulty: getDifficulty(setup.difficulty),
+      playerAttackers: new Set<number>(),
       onKill: (a, v) => this.handleKill(a, v),
     };
 
@@ -181,6 +184,7 @@ export class BattleScene {
     this.player = new Player(this.world, this.camera, cfg, this.input, this.scene);
     this.player.onHit = (kill, head) => this.hud.showHitmarker(kill || head);
     this.player.onNotify = (m, s) => this.hud.showMessage(m, s ?? '', 2);
+    this.player.onDamage = (bearing) => this.hud.showHitDirection(bearing);
     if (setup.night && setup.era.id === 'modern') this.player.nvgOn = true;
 
     this.support = new Support(this.world, this.scene, setup.era.id);
@@ -754,6 +758,8 @@ export class BattleScene {
 
     // AI
     const pts = this.field.capturePoints;
+    const live = new Set(this.soldiers.filter((s) => s.alive).map((s) => s.id));
+    for (const id of this.world.playerAttackers) if (!live.has(id)) this.world.playerAttackers.delete(id);
     for (const s of this.soldiers) s.update(dt, pts);
     for (const t of this.tanks) t.update(dt, pts);
     this.support.update(dt);
