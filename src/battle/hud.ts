@@ -2,6 +2,7 @@ import type { BattleSetup, BattleResult } from './types';
 import type { CapturePoint } from './terrain';
 import { HALF } from './terrain';
 import { pad2 } from '../core/math';
+import { getDifficulty } from './difficulty';
 
 export interface SupportSlot {
   key: string;
@@ -61,6 +62,7 @@ export class HUD {
   private grenades: HTMLElement;
   private cmdHelp: HTMLElement;
   private reveal: HTMLElement;
+  private hitDir: HTMLElement;
   private msgTimer = 0;
   private lastHealth = 100;
   onResume: (() => void) | null = null;
@@ -76,6 +78,8 @@ export class HUD {
     this.scope = el('div', 'hud-scope');
     this.root.append(this.vignette, this.damage, this.nvg, this.gas, this.scope);
 
+    this.hitDir = el('div', 'hud-hitdir');
+    this.root.append(this.hitDir);
     this.crosshair = el('div', 'hud-crosshair', '<i></i><i></i><i></i><i></i>');
     this.hitmarker = el('div', 'hud-hitmarker', '<i></i><i></i><i></i><i></i>');
     this.root.append(this.crosshair, this.hitmarker);
@@ -143,7 +147,7 @@ export class HUD {
     this.root.append(this.dead);
 
     this.pause = el('div', 'hud-pause');
-    this.pause.innerHTML = `<div class="pause-box"><h2>Battle Paused</h2><p class="muted">${setup.provinceName} · ${setup.era.name}</p>
+    this.pause.innerHTML = `<div class="pause-box"><h2>Battle Paused</h2><p class="muted">${setup.provinceName} · ${setup.era.name} · Difficulty: ${getDifficulty(setup.difficulty).name}</p>
       <div class="pause-controls">
         <div><kbd>W A S D</kbd> Move · <kbd>Shift</kbd> Sprint · <kbd>Ctrl</kbd> Crouch · <kbd>Space</kbd> Jump</div>
         <div><kbd>LMB</kbd> Fire · <kbd>RMB</kbd> Aim · <kbd>R</kbd> Reload/Unjam · <kbd>1</kbd><kbd>2</kbd> Weapons · <kbd>F</kbd> Grenade · <kbd>H</kbd> Medkit</div>
@@ -165,6 +169,18 @@ export class HUD {
     if (hp < this.lastHealth - 0.5) this.flashDamage();
     this.lastHealth = hp;
   }
+  /** Wedge pointing at whoever just shot you. `null` for artillery and gas. */
+  showHitDirection(bearing: number | null) {
+    if (bearing === null) return;
+    const wedge = el('i');
+    // CSS rotates clockwise from straight up, the bearing is counter-clockwise from forward.
+    wedge.style.transform = `rotate(${(-bearing * 180) / Math.PI}deg)`;
+    this.hitDir.appendChild(wedge);
+    requestAnimationFrame(() => wedge.classList.add('fade'));
+    setTimeout(() => wedge.remove(), 1400);
+    while (this.hitDir.children.length > 6) this.hitDir.firstElementChild!.remove();
+  }
+
   flashDamage() {
     this.damage.classList.remove('flash');
     void this.damage.offsetWidth;

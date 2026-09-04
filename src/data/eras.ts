@@ -1,4 +1,5 @@
 import type { EraDef, NationDef, TechDef, TechBranch } from './types';
+import { POLITICS } from './history';
 import { WEAPONS } from './weapons';
 
 const t = (id: string, name: string, branch: TechBranch, tier: number, desc: string, effects: TechDef['effects']): TechDef => ({
@@ -20,6 +21,7 @@ const ww1Nations: NationDef[] = [
     description: 'Master of the seas with a global empire. Strong industry, professional army, slow to mobilise.',
     strengths: ['+10% steel', 'Superior naval logistics', 'Lewis gun squads'],
     weapons: { rifle: 'lee_enfield', lmg: 'lewis', pistol: 'webley' }, tankName: 'Mark IV', planeName: 'Sopwith Camel',
+    flag: { colors: [0x012169, 0xffffff, 0xc8102e] }, armies: 6, holdings: 'Home islands, Ireland, Canada, India, Australia, Egypt, East & West Africa',
   },
   {
     id: 'france', name: 'France', adjective: 'French', color: 0x3d6fd6,
@@ -28,6 +30,7 @@ const ww1Nations: NationDef[] = [
     description: 'Holding the Western Front. Elan and artillery doctrine, but vulnerable heartland.',
     strengths: ['+1 artillery strike', 'Fortification bonus', 'Chauchat gunners'],
     weapons: { rifle: 'lebel', lmg: 'chauchat', pistol: 'c96' }, tankName: 'Renault FT', planeName: 'SPAD XIII',
+    flag: { colors: [0x0055a4, 0xffffff, 0xef4135], dir: 'v' }, armies: 7, holdings: 'Metropolitan France, North & West Africa, Indochina, Madagascar',
   },
   {
     id: 'germany', name: 'German Empire', adjective: 'German', color: 0x5d5d66,
@@ -36,6 +39,7 @@ const ww1Nations: NationDef[] = [
     description: 'Best-trained army in the world, fighting on two fronts. Industry and doctrine are your edge.',
     strengths: ['+20% industry', 'Stormtrooper tactics', 'MG 08/15 squads'],
     weapons: { rifle: 'gewehr98', lmg: 'mg08', smg: 'mp18', pistol: 'luger' }, tankName: 'A7V', planeName: 'Fokker Dr.I',
+    flag: { colors: [0x000000, 0xffffff, 0xdd0000] }, armies: 8, holdings: 'The Reich, South-West & East Africa, Cameroon, Togoland',
   },
   {
     id: 'russia', name: 'Russian Empire', adjective: 'Russian', color: 0x3a9d4f,
@@ -44,6 +48,7 @@ const ww1Nations: NationDef[] = [
     description: 'Endless manpower and endless land, but a creaking industry and fragile stability.',
     strengths: ['+60% manpower', 'Vast territory', 'Low stability'],
     weapons: { rifle: 'mosin', lmg: 'lewis', pistol: 'nagant' }, tankName: 'Austin Armoured Car', planeName: 'Nieuport 17',
+    flag: { colors: [0xffffff, 0x0039a6, 0xd52b1e] }, armies: 9, holdings: 'European Russia, Poland, Finland, Baltics, Ukraine, Caucasus, Central Asia, Siberia',
   },
   {
     id: 'ottoman', name: 'Ottoman Empire', adjective: 'Ottoman', color: 0xe0a030,
@@ -52,6 +57,7 @@ const ww1Nations: NationDef[] = [
     description: 'The sick man of Europe fights back. Defensive terrain, tough soldiers, weak factories.',
     strengths: ['Defensive bonus', 'Desert warfare', 'Low industry'],
     weapons: { rifle: 'gewehr98', lmg: 'mg08', pistol: 'c96' }, tankName: 'Captured Mark IV', planeName: 'Albatros D.III',
+    flag: { colors: [0xe30a17, 0xffffff, 0xe30a17] }, armies: 4, holdings: 'Anatolia, Syria, Palestine, Mesopotamia, Yemen',
   },
   {
     id: 'usa', name: 'United States', adjective: 'American', color: 0x4fb3d9,
@@ -60,6 +66,7 @@ const ww1Nations: NationDef[] = [
     description: 'An ocean away from the fighting with the largest industry on Earth. Arrive late, arrive strong.',
     strengths: ['+40% industry', 'Isolated from enemies', 'Long sea lanes'],
     weapons: { rifle: 'springfield', lmg: 'lewis', pistol: 'm1911' }, tankName: 'Renault FT', planeName: 'SPAD XIII',
+    flag: { colors: [0xb22234, 0xffffff, 0x3c3b6e] }, armies: 3, holdings: 'Continental US, Alaska, Philippines, Puerto Rico',
   },
 ];
 
@@ -87,6 +94,7 @@ const ww2Nations: NationDef[] = [
     description: 'The Arsenal of Democracy. Unmatched industry and air power once mobilised.',
     strengths: ['+60% industry', 'Air superiority', 'M1 Garand'],
     weapons: { rifle: 'garand', lmg: 'bar', smg: 'thompson', pistol: 'm1911' }, tankName: 'M4 Sherman', planeName: 'P-51 Mustang',
+    flag: { colors: [0xb22234, 0xffffff, 0x3c3b6e] }, armies: 6, holdings: 'Continental US, Alaska, Hawaii, Philippines, Greenland',
   },
   {
     id: 'uk', name: 'United Kingdom', adjective: 'British', color: 0xd85a5a,
@@ -95,6 +103,7 @@ const ww2Nations: NationDef[] = [
     description: 'Alone at first, then the launchpad for liberation. Strong navy and bombers.',
     strengths: ['Naval logistics', 'Radar research', 'Bren gunners'],
     weapons: { rifle: 'no4', lmg: 'bren', smg: 'sten', pistol: 'webley' }, tankName: 'Cromwell', planeName: 'Spitfire',
+    flag: { colors: [0x012169, 0xffffff, 0xc8102e] }, armies: 7, holdings: 'Home islands, Canada, India, Australia, Middle East, Africa, Free French colonies',
   },
   {
     id: 'ussr', name: 'Soviet Union', adjective: 'Soviet', color: 0xa01818,
@@ -103,6 +112,7 @@ const ww2Nations: NationDef[] = [
     description: 'Deep battle doctrine and the T-34. Bleed the invader, then roll west.',
     strengths: ['+80% manpower', 'T-34 armour', 'PPSh-41 squads'],
     weapons: { rifle: 'svt40', lmg: 'dp28', smg: 'ppsh', pistol: 'tt33' }, tankName: 'T-34', planeName: 'Il-2 Sturmovik',
+    flag: { colors: [0xcc0000, 0xffd700, 0xcc0000] }, armies: 10, holdings: 'Russia, Caucasus, Central Asia, Siberia, Mongolia (Belarus & Ukraine occupied)',
   },
   {
     id: 'germany', name: 'Germany', adjective: 'German', color: 0x6a6a72,
@@ -111,6 +121,7 @@ const ww2Nations: NationDef[] = [
     description: 'Blitzkrieg. Combined arms doctrine and the best tanks, against the whole world.',
     strengths: ['+30% industry', 'Panzer doctrine', 'MG 42'],
     weapons: { rifle: 'kar98k', lmg: 'mg42', smg: 'mp40', pistol: 'p38' }, tankName: 'Panzer IV', planeName: 'Bf 109',
+    flag: { colors: [0xb00000, 0xffffff, 0x000000] }, armies: 10, holdings: 'Greater Germany, occupied France, Low Countries, Scandinavia, Poland, Balkans, Baltics, Belarus, Ukraine',
   },
   {
     id: 'japan', name: 'Empire of Japan', adjective: 'Japanese', color: 0xe8c04a,
@@ -119,6 +130,7 @@ const ww2Nations: NationDef[] = [
     description: 'Island hopping in reverse. Fanatical infantry and a formidable carrier fleet.',
     strengths: ['Naval dominance', 'Fanatical defence', 'Type 99 LMG'],
     weapons: { rifle: 'arisaka', lmg: 'type99lmg', smg: 'type100', pistol: 'nambu' }, tankName: 'Type 97 Chi-Ha', planeName: 'A6M Zero',
+    flag: { colors: [0xffffff, 0xbc002d, 0xffffff] }, armies: 6, holdings: 'Home islands, Korea, Taiwan',
   },
 ];
 
@@ -146,6 +158,7 @@ const modernNations: NationDef[] = [
     description: 'Global reach, precision fires and the most expensive military on Earth.',
     strengths: ['+50% industry', 'Precision strikes', 'Night operations'],
     weapons: { rifle: 'm4a1', lmg: 'm249', dmr: 'm110', pistol: 'm17' }, tankName: 'M1A2 Abrams', planeName: 'F-35A',
+    flag: { colors: [0xb22234, 0xffffff, 0x3c3b6e] }, armies: 8, holdings: 'Continental US, Alaska, Hawaii, Puerto Rico',
   },
   {
     id: 'china', name: "People's Republic of China", adjective: 'Chinese', color: 0xd42c2c,
@@ -154,6 +167,7 @@ const modernNations: NationDef[] = [
     description: 'The workshop of the world turned to war. Massive production and drone swarms.',
     strengths: ['+60% industry', '+60% manpower', 'Drone swarms'],
     weapons: { rifle: 'qbz191', lmg: 'qjy201', dmr: 'qbu', pistol: 'qsz92' }, tankName: 'Type 99A', planeName: 'J-20',
+    flag: { colors: [0xde2910, 0xffde00, 0xde2910] }, armies: 9, holdings: 'Mainland China, Tibet, Xinjiang, Manchuria',
   },
   {
     id: 'russia', name: 'Russian Federation', adjective: 'Russian', color: 0x3a7d44,
@@ -162,6 +176,7 @@ const modernNations: NationDef[] = [
     description: 'Artillery, electronic warfare and depth. Strategic reserves but a strained economy.',
     strengths: ['+2 artillery strikes', 'Electronic warfare', 'Vast territory'],
     weapons: { rifle: 'ak12', lmg: 'pkm', dmr: 'svd', pistol: 'mp443' }, tankName: 'T-90M', planeName: 'Su-57',
+    flag: { colors: [0xffffff, 0x0039a6, 0xd52b1e] }, armies: 11, holdings: 'Russian Federation from Kaliningrad to Kamchatka',
   },
   {
     id: 'nato', name: 'NATO Coalition', adjective: 'Coalition', color: 0x2f4fb0,
@@ -170,6 +185,7 @@ const modernNations: NationDef[] = [
     description: 'Europe united under one command. Interoperable, well-equipped, politically fragile.',
     strengths: ['+30% industry', 'Allied stability', 'HK416 squads'],
     weapons: { rifle: 'hk416', lmg: 'm249', dmr: 'm110', pistol: 'glock17' }, tankName: 'Leopard 2A7', planeName: 'Eurofighter Typhoon',
+    flag: { colors: [0x004990, 0xffffff, 0x004990] }, armies: 7, holdings: 'European NATO members, the UK, Canada, Greenland',
   },
   {
     id: 'regional', name: 'Regional Coalition', adjective: 'Coalition', color: 0xc78a2b,
@@ -178,6 +194,7 @@ const modernNations: NationDef[] = [
     description: 'A bloc of regional powers fighting on home ground. Cheap drones, deep manpower, weak industry.',
     strengths: ['+40% manpower', 'Loitering munitions', 'Home defence bonus'],
     weapons: { rifle: 'ak103', lmg: 'pkm', dmr: 'svd', pistol: 'glock17' }, tankName: 'T-72M', planeName: 'MiG-29',
+    flag: { colors: [0x239f40, 0xffffff, 0xda0000] }, armies: 4, holdings: 'Iran, Iraq, Syria',
   },
 ];
 
@@ -201,28 +218,31 @@ export const ERAS: EraDef[] = [
     id: 'ww1', name: 'World War I', years: '1914 – 1918', tagline: 'Attrition',
     description: 'Brutal trench warfare, creeping barrages, the first gas attacks and the first tanks. Every metre is paid for in blood.',
     startYear: 1914, startMonth: 8, nations: ww1Nations, techs: ww1Techs, weapons: WEAPONS, theme: 'trench',
-    blocs: [['britain', 'france', 'russia'], ['germany', 'ottoman'], ['usa']],
-    warsAtStart: [['germany', 'france'], ['germany', 'britain'], ['germany', 'russia'], ['ottoman', 'russia'], ['ottoman', 'britain']],
+    blocs: [['britain', 'france', 'russia', 'serbia', 'belgium', 'japan'], ['germany', 'austria'], ['usa']],
+    warsAtStart: [['germany', 'france'], ['germany', 'britain'], ['germany', 'russia'], ['germany', 'belgium'], ['austria', 'serbia'], ['austria', 'russia'], ['austria', 'france'], ['austria', 'britain'], ['japan', 'germany']],
     moveDays: 4, kits: ['rifleman', 'medic', 'mg', 'smg', 'tank'], kitLocks: { mg: 'ww1_inf2', smg: 'ww1_inf4', tank: 'ww1_arm3' },
     focus: ['Trench networks', 'Chemical warfare', 'Creeping barrages', 'Landships'],
+    politics: POLITICS.ww1,
   },
   {
     id: 'ww2', name: 'World War II', years: '1939 – 1945', tagline: 'Manoeuvre',
     description: 'Blitzkrieg, massive armoured clashes, island hopping and the fight for the skies. Speed and industry decide everything.',
     startYear: 1941, startMonth: 12, nations: ww2Nations, techs: ww2Techs, weapons: WEAPONS, theme: 'ruins',
-    blocs: [['usa', 'uk', 'ussr'], ['germany', 'japan']],
-    warsAtStart: [['germany', 'uk'], ['germany', 'ussr'], ['japan', 'usa'], ['germany', 'usa']],
+    blocs: [['usa', 'uk', 'ussr', 'china', 'netherlands'], ['germany', 'japan', 'italy', 'hungary', 'romania', 'bulgaria', 'finland']],
+    warsAtStart: [['germany', 'uk'], ['germany', 'ussr'], ['germany', 'usa'], ['italy', 'uk'], ['italy', 'ussr'], ['italy', 'usa'], ['japan', 'usa'], ['japan', 'uk'], ['japan', 'china'], ['hungary', 'ussr'], ['romania', 'ussr'], ['finland', 'ussr'], ['bulgaria', 'uk']],
     moveDays: 3, kits: ['rifleman', 'smg', 'mg', 'medic', 'tank'], kitLocks: { smg: 'ww2_inf2', tank: 'ww2_arm1' },
     focus: ['Blitzkrieg', 'Armoured warfare', 'Air superiority', 'Urban ruins'],
+    politics: POLITICS.ww2,
   },
   {
     id: 'modern', name: 'Present Day', years: '2026 +', tagline: 'Precision',
     description: 'Drone swarms, precision missiles, electronic warfare and night operations. High-tech, high-mobility, high cost.',
     startYear: 2026, startMonth: 3, nations: modernNations, techs: modernTechs, weapons: WEAPONS, theme: 'urban',
-    blocs: [['usa', 'nato'], ['china', 'russia']],
-    warsAtStart: [['russia', 'nato'], ['china', 'usa'], ['regional', 'usa']],
+    blocs: [['usa', 'nato', 'japan', 'skorea', 'australia', 'israel', 'taiwan', 'ukraine', 'turkey'], ['china', 'russia', 'nkorea', 'belarus', 'pakistan']],
+    warsAtStart: [['russia', 'nato'], ['russia', 'ukraine'], ['russia', 'usa'], ['china', 'usa'], ['china', 'taiwan'], ['regional', 'usa'], ['regional', 'israel']],
     moveDays: 2, kits: ['rifleman', 'mg', 'medic', 'marksman', 'tank'], kitLocks: { marksman: 'mod_inf3', tank: 'mod_arm3' },
     focus: ['Drone warfare', 'Precision strikes', 'Night vision', 'Electronic warfare'],
+    politics: POLITICS.modern,
   },
 ];
 

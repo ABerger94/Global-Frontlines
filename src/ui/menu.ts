@@ -83,13 +83,15 @@ export class Menu {
     this.nation = null;
     this.root.innerHTML = `<div class="setup">
       <div class="setup-head"><h2>${era.name} · Choose your nation</h2><div class="steps"><span>1 · Era</span><span class="on">2 · Nation</span><span>3 · Deploy</span></div></div>
-      <div class="setup-body"><div class="cards">${era.nations.map((n) => {
-        const allies = era.blocs.find((b) => b.includes(n.id))?.filter((x) => x !== n.id).map((x) => era.nations.find((y) => y.id === x)?.name).filter(Boolean) ?? [];
-        const enemies = era.warsAtStart.filter((w) => w.includes(n.id)).map((w) => era.nations.find((y) => y.id === (w[0] === n.id ? w[1] : w[0]))?.name);
+      <div class="setup-body"><div class="cards">${era.nations.filter((n) => n.playable !== false).map((n) => {
+        const all = [...era.nations, ...era.politics.aiNations];
+        const nameOf = (id: string) => all.find((y) => y.id === id)?.name;
+        const allies = era.blocs.find((b) => b.includes(n.id))?.filter((x) => x !== n.id).map(nameOf).filter(Boolean) ?? [];
+        const enemies = era.warsAtStart.filter((w) => w.includes(n.id)).map((w) => nameOf(w[0] === n.id ? w[1] : w[0])).filter(Boolean);
         return `<div class="card" data-nation="${n.id}"><div class="swatch" style="background:#${n.color.toString(16).padStart(6, '0')}"></div><div class="flag" style="${flagStyle(n)}"></div><h3>${n.name}</h3><p>${n.description}</p><div class="tags">${n.strengths.map((s) => `<span>${s}</span>`).join('')}</div>
           <div class="stat"><span>Capital</span><b>${n.capital.name}</b></div><div class="stat"><span>Industry</span><b>${'★'.repeat(Math.round(n.industry * 3))}</b></div><div class="stat"><span>Manpower</span><b>${'★'.repeat(Math.round(n.manpower * 2.5))}</b></div>
           <div class="stat"><span>Allies</span><b>${allies.length ? allies.join(', ') : 'None'}</b></div><div class="stat"><span>At war with</span><b>${enemies.length ? enemies.join(', ') : 'Nobody (yet)'}</b></div>
-          <div class="stat"><span>Rifle</span><b>${n.weapons.rifle.replace(/_/g, ' ')}</b></div></div>`;
+          <div class="stat"><span>Territory</span><b style="text-align:right;max-width:60%">${n.holdings ?? ''}</b></div></div>`;
       }).join('')}</div></div>
       <div class="setup-foot"><button class="btn" data-act="back">← Back</button><button class="btn primary big" data-act="start" disabled>Start Campaign</button></div></div>`;
     this.root.querySelectorAll<HTMLElement>('[data-nation]').forEach((c) =>

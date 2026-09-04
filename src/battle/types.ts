@@ -18,6 +18,8 @@ export interface BattleSetup {
   enemyTickets: number;
   seed: number;
   night: boolean;
+  /** Combat difficulty id (see difficulty.ts). */
+  difficulty: string;
   /** Called every strategic day while the battle runs. */
   onDay?: () => void;
 }

@@ -59,18 +59,19 @@ export class Input {
   }
 
   requestLock() {
-    if (document.pointerLockElement !== this.canvas) {
+    if (document.pointerLockElement === this.canvas) return;
+    // Chrome rejects the returned promise when there is no user gesture; swallow it
+    // so a redeploy without focus does not spew unhandled rejections.
+    const attempt = (opts?: PointerLockOptions): Promise<void> | null => {
       try {
-        const p = this.canvas.requestPointerLock({ unadjustedMovement: true } as any) as unknown;
-        if (p && typeof (p as Promise<void>).catch === 'function') (p as Promise<void>).catch(() => this.canvas.requestPointerLock());
+        const p = (opts ? this.canvas.requestPointerLock(opts) : this.canvas.requestPointerLock()) as unknown;
+        return p && typeof (p as Promise<void>).then === 'function' ? (p as Promise<void>) : null;
       } catch {
-        try {
-          this.canvas.requestPointerLock();
-        } catch {
-          /* ignore */
-        }
+        return null;
       }
-    }
+    };
+    const first = attempt({ unadjustedMovement: true } as PointerLockOptions);
+    if (first) first.catch(() => attempt()?.catch(() => {}));
   }
   releaseLock() {
     if (document.pointerLockElement === this.canvas) document.exitPointerLock();

@@ -5,6 +5,7 @@ import { HALF, type Battlefield } from './terrain';
 import { hasLOS, soundAt, type BattleWorld, type Combatant } from './combat';
 import { audio } from '../audio/audio';
 import { clamp } from '../core/math';
+import { AI_ENGAGE_RANGE } from './difficulty';
 
 export const UNIFORM_COLORS: Record<string, number> = {
   britain: 0x6b6a4a, france: 0x6b7fa0, germany: 0x5b6357, russia: 0x6e6a4c, ottoman: 0x8a7a55, usa: 0x6f6b4b,
@@ -161,6 +162,10 @@ export class Soldier implements Combatant {
   private coverPos: THREE.Vector3 | null = null;
   private coverUntil = 0;
   private lastHit = -10;
+  /** When the current target was acquired, and how long this soldier needs to aim. */
+  private targetSince = 0;
+  private aimTime = 0;
+  private freshTarget = false;
   private goal = new THREE.Vector3();
   private offset = new THREE.Vector3((Math.random() - 0.5) * 8, 0, (Math.random() - 0.5) * 8);
   private deadTime = 0;
@@ -207,6 +212,7 @@ export class Soldier implements Combatant {
 
   private die(attacker: Combatant | null) {
     this.alive = false;
+    this.world.playerAttackers.delete(this.id);
     this.deadTime = this.world.time;
     this.marker.visible = false;
     this.world.onKill(attacker, this);
@@ -237,53 +243,109 @@ export class Soldier implements Combatant {
     }
   }
 
+  /** Effective engagement range for this soldier's weapon. */
+  get engageRange(): number {
+    return AI_ENGAGE_RANGE[this.weapon.kind] ?? 120;
+  }
+
+  /** How far this soldier can spot at all (a little beyond its engagement range). */
+  private sightRange(): number {
+    let r = this.engageRange * 1.3;
+    if (this.world.night && !this.world.revealed) r *= 0.55;
+    return r;
+  }
+
   private perceive() {
-    const range = this.weapon.range * 0.75 + 40;
+    const sight = this.sightRange();
+    const diff = this.world.difficulty;
     let best: Combatant | null = null;
-    let bestD = range;
+    let bestD = Infinity;
+    let bestOther: Combatant | null = null;
+    let bestOtherD = Infinity;
     const eye = this.pos.clone();
     eye.y += this.crouching ? 1.1 : 1.55;
-    const nightPenalty = this.world.night ? 0.7 : 1;
     for (const c of this.world.combatants) {
       if (!c.alive || c.team === this.team) continue;
       const d = c.pos.distanceTo(this.pos);
-      if (d > bestD * nightPenalty && !(c.isVehicle && d < bestD)) continue;
+      // A lone player is harder to pick out than a vehicle or a moving squad.
+      let range = sight;
+      if (c.isPlayer) {
+        if (this.world.time < (c.protectedUntil ?? 0)) continue;
+        range *= diff.playerVisibility * (c.crouching ? 0.75 : c.moving ? 1.1 : 0.9);
+      }
+      else if (c.isVehicle) range = Math.max(range, 200);
+      if (d > range) continue;
+      const chest = c.pos.clone();
+      chest.y += c.isVehicle ? 1.2 : c.crouching ? 0.9 : 1.3;
+      if (!hasLOS(this.world.field, eye, chest)) continue;
       if (d < bestD) {
-        const chest = c.pos.clone();
-        chest.y += c.isVehicle ? 1.2 : c.crouching ? 0.9 : 1.3;
-        if (hasLOS(this.world.field, eye, chest)) {
-          best = c;
-          bestD = d;
-        }
+        bestD = d;
+        best = c;
+      }
+      if (!c.isPlayer && d < bestOtherD) {
+        bestOtherD = d;
+        bestOther = c;
       }
     }
-    this.target = best;
+    // Only a few enemies may engage the player at once; the rest fight the AI squads.
+    if (best?.isPlayer && this.team !== 'player') {
+      const attackers = this.world.playerAttackers;
+      if (!attackers.has(this.id)) {
+        if (attackers.size < diff.maxAttackers) attackers.add(this.id);
+        else best = bestOther;
+      }
+    }
+    if (!best?.isPlayer) this.world.playerAttackers.delete(this.id);
+    if (best !== this.target) {
+      this.target = best;
+      this.targetSince = this.world.time;
+      this.freshTarget = true;
+      // Time to swing round, identify and settle the sights on a new contact.
+      const base = best?.isPlayer ? diff.reaction : 0.35;
+      this.aimTime = base * (0.6 + Math.random() * 0.8) + (this.moving ? 0.25 : 0);
+    }
   }
 
   private fire(dt: number) {
     const t = this.target;
     if (!t || !t.alive) return;
+    // Out of effective range, or still bringing the weapon to bear.
+    if (t.pos.distanceTo(this.pos) > this.engageRange) return;
+    if (this.world.time - this.targetSince < this.aimTime) return;
     const rpmInterval = 60 / this.weapon.rpm;
     this.fireTimer -= dt;
     if (this.fireTimer > 0) return;
     if (this.burstLeft <= 0) {
       // start a new burst after a pause
       this.burstLeft = this.weapon.auto ? 3 + Math.floor(Math.random() * 4) : 1;
-      this.fireTimer = this.weapon.auto ? 0.5 + Math.random() * 0.8 : this.weapon.boltAction ? 1.1 + Math.random() * 0.8 : 0.5 + Math.random() * 0.5;
+      const far = clamp(t.pos.distanceTo(this.pos) / this.engageRange, 0, 1);
+      const pause = this.weapon.auto ? 0.6 + Math.random() * 0.9 : this.weapon.boltAction ? 1.3 + Math.random() * 1.0 : 0.6 + Math.random() * 0.6;
+      this.fireTimer = pause * (1 + far * 0.8);
       return;
     }
     this.burstLeft--;
     this.fireTimer = rpmInterval;
     const dist = t.pos.distanceTo(this.pos);
+    const diff = this.world.difficulty;
     const teamAcc = this.team === 'enemy' ? this.world.enemyAccuracyMult : this.world.friendlyAccuracyMult;
-    let hitChance = this.accuracy * teamAcc * clamp(1.15 - dist / (this.weapon.range * 1.1), 0.05, 1);
-    if (t.moving) hitChance *= 0.65;
+    // Accuracy falls off sharply towards the edge of the weapon's real engagement envelope.
+    let hitChance = this.accuracy * teamAcc * clamp(1.1 - dist / this.engageRange, 0.03, 1);
+    // Aim keeps settling for a moment after the first shot goes off.
+    const settled = clamp((this.world.time - this.targetSince - this.aimTime) / 1.5, 0, 1);
+    hitChance *= 0.4 + 0.6 * settled;
+    if (t.moving) hitChance *= 0.6;
     if (t.crouching) hitChance *= 0.7;
-    if (this.moving) hitChance *= 0.55;
-    if (t.isPlayer) hitChance *= 0.8; // a bit of player forgiveness
+    if (this.moving) hitChance *= 0.5;
+    if (this.world.time - this.lastHit < 3) hitChance *= 0.55; // suppressed
     if (t.isVehicle) hitChance *= 1.5;
-    if (this.world.night && !this.world.revealed) hitChance *= 0.85;
-    const hit = Math.random() < hitChance;
+    if (this.world.night && !this.world.revealed) hitChance *= 0.8;
+    let hit: boolean;
+    if (t.isPlayer) {
+      hitChance *= diff.enemyAccuracy;
+      // The opening round of a fresh engagement is a warning shot, not a headshot.
+      hit = this.freshTarget && diff.firstShotMisses ? false : Math.random() < hitChance;
+      this.freshTarget = false;
+    } else hit = Math.random() < hitChance;
     // visuals
     const from = this.muzzle.copy(this.pos);
     from.y += this.crouching ? 1.05 : 1.35;
@@ -371,8 +433,8 @@ export class Soldier implements Combatant {
     if (this.coverPos && this.world.time < this.coverUntil) dest = this.coverPos;
     else {
       this.coverPos = null;
-      const holdRange = this.weapon.kind === 'lmg' ? 0.55 : this.weapon.kind === 'smg' ? 0.25 : 0.45;
-      if (hasTarget && distToTarget < this.weapon.range * holdRange && this.squad?.mode !== 'follow') dest = null;
+      const holdRange = this.weapon.kind === 'lmg' ? 0.95 : this.weapon.kind === 'smg' ? 0.6 : 0.85;
+      if (hasTarget && distToTarget < this.engageRange * holdRange && this.squad?.mode !== 'follow') dest = null;
       else dest = this.goal;
     }
     this.crouching = hasTarget && !dest && underFire;

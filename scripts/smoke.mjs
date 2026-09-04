@@ -81,21 +81,35 @@ try {
   // --- UI-driven army order: select the capital (screen centre), pick its army, click a neighbouring province
   await page.evaluate(() => {
     const app = window.__gf;
+    app.stratUI.setSpeed(0); // freeze the simulation so panels do not re-render mid-interaction
     const cap = app.sim.world.provinces.find((p) => p.capitalOf === app.sim.playerId);
     app.globe.focusProvince(cap.id, 2.2);
   });
-  await page.waitForTimeout(400);
+  await page.waitForTimeout(900);
   await page.mouse.click(720, 450);
   await page.waitForTimeout(400);
   const armyRow = await page.$('.province-panel .army-row[data-mine]');
-  if (!armyRow) errors.push('capital panel shows no army to select');
+  if (!armyRow) {
+    const dbg = await page.evaluate(() => {
+      const app = window.__gf;
+      const cap = app.sim.world.provinces.find((p) => p.capitalOf === app.sim.playerId);
+      const armies = app.sim.armiesOf(app.sim.playerId).map((a) => ({ n: a.name, at: app.sim.world.provinces[a.province].name, moving: a.path.length > 1 }));
+      return { capital: cap && cap.name, selected: app.stratUI.selectedProvince !== null ? app.sim.world.provinces[app.stratUI.selectedProvince].name : null, panel: document.querySelector('.province-panel h3')?.textContent, armies };
+    });
+    errors.push('capital panel shows no army to select: ' + JSON.stringify(dbg));
+  }
   else {
-    await armyRow.click();
+    await page.click('.province-panel .army-row[data-mine]');
     await page.waitForTimeout(200);
     const target = await page.evaluate(() => {
       const app = window.__gf;
       const cap = app.sim.world.provinces.find((p) => p.capitalOf === app.sim.playerId);
-      const nb = cap.neighbors.map((i) => app.sim.world.provinces[i]).find((q) => q.isLand && q.owner === app.sim.playerId);
+      const w = app.sim.world;
+      const counts = new Map();
+      for (let i = 0; i < w.indexMap.length; i += 7) counts.set(w.indexMap[i], (counts.get(w.indexMap[i]) || 0) + 1);
+      const cands = cap.neighbors.map((i) => w.provinces[i]).filter((q) => q.isLand && q.owner === app.sim.playerId);
+      cands.sort((a, b) => (counts.get(b.id) || 0) - (counts.get(a.id) || 0));
+      const nb = cands[0];
       if (!nb) return null;
       const v = nb.pos.clone().multiplyScalar(1.01).project(app.globe.camera);
       return { id: nb.id, name: nb.name, x: (v.x * 0.5 + 0.5) * innerWidth, y: (-v.y * 0.5 + 0.5) * innerHeight };
@@ -104,11 +118,28 @@ try {
       await page.mouse.click(target.x, target.y);
       await page.waitForTimeout(300);
       const moving = await page.evaluate(() => window.__gf.sim.armiesOf(window.__gf.sim.playerId).some((a) => a.path.length > 1));
-      console.log('ui army order', { target: target.name, moving });
-      if (!moving) errors.push('clicking a destination after selecting an army did not issue a move order');
+      const diag = await page.evaluate(() => {
+        const app = window.__gf;
+        const sel = app.stratUI.selectedProvince;
+        return { selected: sel !== null ? app.sim.world.provinces[sel].name : null, moveMode: app.stratUI.moveMode, selectedArmy: app.stratUI.selectedArmy, lastLog: [...document.querySelectorAll('.log .entry')].map((e) => e.textContent).slice(-2) };
+      });
+      console.log('ui army order', { target, moving, diag });
+      if (!moving) errors.push('clicking a destination after selecting an army did not issue a move order: ' + JSON.stringify({ target, diag }));
     }
   }
   await page.evaluate(() => window.__gf.stratUI.selectProvince(null));
+  await page.evaluate(() => {
+    const app = window.__gf;
+    const cap = app.sim.world.provinces.find((p) => p.capitalOf === app.sim.playerId);
+    app.globe.focusProvince(cap.id, 1.45);
+  });
+  await page.waitForTimeout(900);
+  await shot('04c-zoomed');
+  await page.evaluate(() => {
+    const app = window.__gf;
+    const cap = app.sim.world.provinces.find((p) => p.capitalOf === app.sim.playerId);
+    app.globe.focusProvince(cap.id, 2.6);
+  });
   // open research & production tabs
   await page.click('[data-tab=research]');
   await page.waitForTimeout(400);
@@ -141,12 +172,24 @@ try {
   await shot('07-battle-prompt');
   await page.click('[data-battle=command]');
   await page.waitForTimeout(300);
+  const diffCount = await page.$$eval('[data-diff]', (els) => els.length);
+  if (diffCount !== 4) errors.push('deploy panel is missing the difficulty selector: ' + diffCount);
+  await page.click('[data-diff=recruit]');
+  const chosen = await page.evaluate(() => localStorage.getItem('gf.difficulty'));
+  if (chosen !== 'recruit') errors.push('difficulty choice was not remembered: ' + chosen);
   await page.click(`[data-role=${ROLE}]`);
   await page.click(`[data-kit=${KIT}]`);
   await shot('08-deploy');
   await page.click('[data-battle=deploy]');
   await page.waitForSelector('.hud', { timeout: 30000 });
   await page.waitForTimeout(6000);
+  const combat = await page.evaluate(() => {
+    const b = window.__gf.battle;
+    return { difficulty: b.world.difficulty.id, cap: b.world.difficulty.maxAttackers, attackers: b.world.playerAttackers.size, hp: Math.round(b.player.hp) };
+  });
+  console.log('combat state', combat);
+  if (combat.difficulty !== 'recruit') errors.push('battle did not use the chosen difficulty: ' + combat.difficulty);
+  if (combat.attackers > combat.cap) errors.push('more enemies engaged the player than the cap allows');
   await shot('09-battle');
   const battleHit = await page.evaluate(() => document.elementFromPoint(720, 450)?.id || document.elementFromPoint(720, 450)?.className);
   console.log('battle element under cursor', battleHit);

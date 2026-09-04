@@ -7,17 +7,21 @@ import { KIT_INFO, ROLE_INFO } from '../data/eras';
 import { WEAPONS } from '../data/weapons';
 import { fmtNum } from '../core/math';
 import { audio } from '../audio/audio';
+import { DIFFICULTIES, DEFAULT_DIFFICULTY } from '../battle/difficulty';
 
 export interface StrategyUICallbacks {
   onMenu: () => void;
   onAutoResolve: (ctx: BattleContext) => void;
-  onTakeCommand: (ctx: BattleContext, role: RoleId, kit: KitId) => void;
+  onTakeCommand: (ctx: BattleContext, role: RoleId, kit: KitId, difficulty: string) => void;
 }
 
 export function flagStyle(n: NationDef | undefined | null): string {
   if (!n) return 'background: linear-gradient(135deg,#8a8a80,#5a5a55)';
-  const c = '#' + n.color.toString(16).padStart(6, '0');
-  return `background: linear-gradient(180deg, ${c} 0 45%, rgba(255,255,255,0.85) 45% 55%, ${c} 55%)`;
+  const hex = (c: number) => '#' + c.toString(16).padStart(6, '0');
+  const colors = n.flag?.colors?.length ? n.flag.colors : [n.color, 0xffffff, n.color];
+  const step = 100 / colors.length;
+  const stops = colors.map((c, i) => `${hex(c)} ${(i * step).toFixed(1)}% ${((i + 1) * step).toFixed(1)}%`).join(', ');
+  return `background: linear-gradient(${n.flag?.dir === 'v' ? '90deg' : '180deg'}, ${stops})`;
 }
 
 type Tab = 'research' | 'production' | 'diplomacy' | 'armies' | null;
@@ -115,8 +119,8 @@ export class StrategyUI {
       return;
     }
     const p = this.sim.world.provinces[this.selectedProvince];
-    const owner = this.sim.era.nations.find((n) => n.id === p.owner);
-    const ownerName = p.owner === 'minor' ? 'Neutral state' : owner ? owner.name : '—';
+    const owner = this.sim.nations.get(p.owner ?? '')?.def;
+    const ownerName = p.owner === 'minor' ? `${p.countryName ?? 'Independent'} (neutral)` : owner ? owner.name : '—';
     const player = this.sim.player;
     const mine = p.owner === player.id;
     const armies = this.sim.armiesIn(p.id);
@@ -127,6 +131,7 @@ export class StrategyUI {
       const rel = p.owner && p.owner !== 'minor' && p.owner !== player.id ? (player.wars.has(p.owner) ? ' <span class="st war">War</span>' : player.allies.has(p.owner) ? ' <span class="st ally">Ally</span>' : '') : '';
       html += `<div class="kv">
         <span>Owner</span><b>${ownerName}${rel}</b>
+        <span>Country</span><b>${p.countryName ?? '—'}${p.countryCapital ? ' (capital)' : ''}</b>
         <span>Terrain</span><b>${t.name} (def ×${t.defense.toFixed(2)})</b>
         <span>Population</span><b>${fmtNum(p.population * 1000)}</b>
         <span>Factories</span><b>${p.factories}</b>
@@ -220,8 +225,9 @@ export class StrategyUI {
       </div>`;
     } else if (this.activeTab === 'diplomacy') {
       html += `<h3>Diplomacy <span class="muted" style="font-weight:400;font-size:12px">${Math.round(n.pp)} political power</span><span class="close" data-act="closeTab">×</span></h3><div class="body">`;
-      for (const o of this.sim.nations.values()) {
-        if (o.id === n.id) continue;
+      const others = [...this.sim.nations.values()].filter((o) => o.id !== n.id);
+      others.sort((x, y) => Number(y.def.playable !== false) - Number(x.def.playable !== false) || this.sim.nationPower(y.id) - this.sim.nationPower(x.id));
+      for (const o of others) {
         const rel = n.relations.get(o.id) ?? 0;
         const st = !o.alive ? 'dead' : n.wars.has(o.id) ? 'war' : n.allies.has(o.id) ? 'ally' : 'peace';
         const stLabel = st === 'dead' ? 'Capitulated' : st === 'war' ? 'At war' : st === 'ally' ? 'Allied' : 'Peace';
@@ -238,7 +244,7 @@ export class StrategyUI {
         }
         html += `</div>`;
       }
-      html += `<p class="muted" style="font-size:12px">Neutral states (grey) can be invaded without a declaration at a cost of 3 stability per province.</p></div>`;
+      html += `<p class="muted" style="font-size:12px">Independent countries (muted colours, no listed government) can be invaded without a declaration at a cost of 3 stability per province.</p></div>`;
     } else if (this.activeTab === 'armies') {
       const armies = this.sim.armiesOf(n.id);
       html += `<h3>Armies <span class="muted" style="font-weight:400;font-size:12px">${armies.length} field armies · ${fmtNum(armies.reduce((s, a) => s + a.men, 0))} men</span><span class="close" data-act="closeTab">×</span></h3><div class="body">`;
@@ -426,6 +432,12 @@ export class StrategyUI {
   // ---------------------------------------------------------------- battle prompt
   showBattlePrompt(ctx: BattleContext) {
     const sim = this.sim;
+    let savedDifficulty = DEFAULT_DIFFICULTY;
+    try {
+      savedDifficulty = localStorage.getItem('gf.difficulty') ?? DEFAULT_DIFFICULTY;
+    } catch {
+      /* private browsing */
+    }
     const p = sim.world.provinces[ctx.provinceId];
     const atk = sim.nations.get(ctx.attacker)!;
     const def = sim.nations.get(ctx.defender);
@@ -445,10 +457,10 @@ export class StrategyUI {
       ['Fortification', `Level ${p.fort}`, playerIsAttacker ? (p.fort ? 'bad' : 'good') : p.fort ? 'good' : 'warn'],
       ['Armour', s.tank ? 'Available' : 'None', s.tank ? 'good' : 'warn'],
     ];
-    const side = (n: typeof atk | undefined, men: number, power: number, label: string) => `<div class="side"><div class="flag" style="${flagStyle(n?.def)}"></div><b>${n ? n.def.name : 'Neutral garrison'}</b><span class="muted">${label}</span><div class="kv"><span>Men</span><b>${fmtNum(men)}</b><span>Combat power</span><b>${fmtNum(power)}</b></div></div>`;
+    const side = (n: typeof atk | undefined, men: number, power: number, label: string) => `<div class="side"><div class="flag" style="${flagStyle(n?.def)}"></div><b>${n ? n.def.name : (p.countryName ?? 'Local') + ' militia'}</b><span class="muted">${label}</span><div class="kv"><span>Men</span><b>${fmtNum(men)}</b><span>Combat power</span><b>${fmtNum(power)}</b></div></div>`;
     const host = this.modalHost;
     host.innerHTML = `<div class="modal-bg"><div class="modal">
-      <div class="head"><small>Conflict zone</small><h2>Battle of ${p.name}</h2><p>${atk.def.name} ${playerIsAttacker ? '(you)' : ''} assaults ${p.name}, held by ${def ? def.def.name + (!playerIsAttacker ? ' (you)' : '') : 'a neutral garrison'}. ${t.name} terrain${p.fort ? `, fortification level ${p.fort}` : ''}.</p></div>
+      <div class="head"><small>Conflict zone</small><h2>Battle of ${p.name}</h2><p>${atk.def.name} ${playerIsAttacker ? '(you)' : ''} assaults ${p.name}, held by ${def ? def.def.name + (!playerIsAttacker ? ' (you)' : '') : 'the ' + (p.countryName ?? 'local') + ' garrison'}. ${t.name} terrain${p.fort ? `, fortification level ${p.fort}` : ''}.</p></div>
       <div class="content">
         <div class="vs">${side(atk, ctx.attackerMen, ctx.attackerPower, 'Attacker')}<div class="mid">VS</div>${side(def, ctx.defenderMen, ctx.defenderPower, 'Defender')}</div>
         <div class="odds"><div class="bar"><i style="--f:${(myOdds * 100).toFixed(0)}%"></i></div><div class="lbl"><span>Your estimated odds: <b style="color:${myOdds > 0.55 ? '#8ee59a' : myOdds > 0.4 ? '#e8b84a' : '#ff8a7a'}">${Math.round(myOdds * 100)}%</b></span><span>Auto-resolve uses these numbers. Taking command lets you beat them.</span></div></div>
@@ -457,6 +469,8 @@ export class StrategyUI {
         <div id="deploy" style="display:none">
           <div class="section-title">Choose your role</div>
           <div class="roles">${(['commander', 'squadleader', 'soldier'] as RoleId[]).map((r) => `<div class="choice ${r === 'soldier' ? 'on' : ''}" data-role="${r}"><b>${ROLE_INFO[r].name}</b><small>${ROLE_INFO[r].desc}</small></div>`).join('')}</div>
+          <div class="section-title">Combat difficulty</div>
+          <div class="roles diff">${DIFFICULTIES.map((d) => `<div class="choice ${d.id === savedDifficulty ? 'on' : ''}" data-diff="${d.id}"><b>${d.name}</b><small>${d.desc}</small></div>`).join('')}</div>
           <div class="section-title">Choose your kit</div>
           <div class="kits">${sim.era.kits.map((k) => {
             const unlocked = s.kits.includes(k);
@@ -476,11 +490,20 @@ export class StrategyUI {
     </div></div>`;
     let role: RoleId = 'soldier';
     let kit: KitId = 'rifleman';
+    let difficulty = savedDifficulty;
     host.querySelector('.modal')!.addEventListener('click', (e) => {
-      const el = (e.target as HTMLElement).closest('[data-battle],[data-role],[data-kit]') as HTMLElement | null;
+      const el = (e.target as HTMLElement).closest('[data-battle],[data-role],[data-kit],[data-diff]') as HTMLElement | null;
       if (!el) return;
       audio.click();
-      if (el.dataset.role) {
+      if (el.dataset.diff) {
+        difficulty = el.dataset.diff;
+        try {
+          localStorage.setItem('gf.difficulty', difficulty);
+        } catch {
+          /* private browsing */
+        }
+        host.querySelectorAll('[data-diff]').forEach((x) => x.classList.toggle('on', x === el));
+      } else if (el.dataset.role) {
         role = el.dataset.role as RoleId;
         host.querySelectorAll('[data-role]').forEach((x) => x.classList.toggle('on', x === el));
       } else if (el.dataset.kit) {
@@ -496,7 +519,7 @@ export class StrategyUI {
         (host.querySelector('[data-battle=deploy]') as HTMLElement).style.display = '';
       } else if (el.dataset.battle === 'deploy') {
         host.innerHTML = '';
-        this.cb.onTakeCommand(ctx, role, kit);
+        this.cb.onTakeCommand(ctx, role, kit, difficulty);
       }
     });
   }
