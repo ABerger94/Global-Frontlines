@@ -25,9 +25,27 @@ npm run dev        # http://localhost:5173
 npm run build      # production bundle in dist/
 npm run preview    # serve the production bundle
 npm run smoke      # headless Playwright walkthrough with screenshots (scripts/out/)
+npm run mobile     # the same walkthrough on a phone viewport, driving the touch controls
 ```
 
-Requirements: a modern browser with WebGL 2, a mouse and a keyboard. The only data shipped is a 160 KB
+Requirements: a modern browser with WebGL 2. Plays with mouse and keyboard on a desktop, and with
+on-screen controls on a phone or tablet.
+
+## Playing on a phone or tablet
+
+Touch is detected automatically; add `?touch=1` to the URL to force the on-screen controls on a
+touch laptop, or `?touch=0` to force them off.
+
+**Strategy layer** works in either orientation. One finger drags the globe, two fingers pinch to zoom,
+and a tap selects a province. The panels become bottom sheets that scroll, and the top bar reflows into
+compact rows so nothing runs off the edge.
+
+**Battle layer** wants landscape, and says so if you hold the phone upright. The left half of the screen
+is a floating thumbstick: put your thumb down anywhere and the stick appears there. The right half aims.
+Fire, aim, reload, jump, crouch, sprint, grenade and medkit sit within reach of your right thumb; crouch
+and sprint latch so you are not stuck holding them. Artillery, air support and squad orders are pills
+along the top, showing how many calls you have left. MAP opens the command map, where one finger pans,
+two fingers pinch, and a toolbar switches between selecting a squad, ordering it, and calling fire. The only data shipped is a 160 KB
 Natural Earth extract (public domain, rebuilt with `node scripts/build-world-data.mjs`); every
 battlefield, soldier, weapon and sound is generated procedurally at runtime.
 

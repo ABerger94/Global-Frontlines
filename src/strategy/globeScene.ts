@@ -5,6 +5,7 @@ import type { StrategySim, Army } from './sim';
 import { Noise3D } from '../core/noise';
 import { latLonToVec3, clamp } from '../core/math';
 import { hashString } from '../core/rng';
+import { device } from '../core/device';
 import countriesData from '../data/geo/countries.json';
 
 /** Muted, distinct colour for an independent country. */
@@ -54,6 +55,8 @@ export class GlobeScene {
     this.controls.minDistance = 1.12;
     this.controls.maxDistance = 4.5;
     this.controls.zoomSpeed = 0.8;
+    // one finger orbits, two fingers pinch-zoom
+    this.controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_ROTATE };
     this.scene.background = new THREE.Color(0x05070d);
 
     // ---- stars
@@ -156,7 +159,7 @@ export class GlobeScene {
           diffuseColor *= vec4(col, 1.0);`,
         );
     };
-    this.globe = new THREE.Mesh(new THREE.SphereGeometry(1, 192, 128), mat);
+    this.globe = new THREE.Mesh(new THREE.SphereGeometry(1, device.lowPower ? 112 : 192, device.lowPower ? 72 : 128), mat);
     this.scene.add(this.globe);
 
     // ---- atmosphere

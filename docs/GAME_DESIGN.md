@@ -115,7 +115,22 @@ A conflict prompt shows both sides, the terrain, and the supply-derived modifier
 * **Boots on the Ground** — Rifleman, Machine Gunner, Medic (heals allies, extra medkits),
   Tank Commander (drivable armour, WWII/Modern). Fighter Pilot is on the roadmap.
 
-### 4.3 Difficulty and AI fairness
+### 4.3 Touch controls
+
+The game is playable on a phone without a keyboard. Touch input is funnelled into the same `Input`
+object the keyboard and mouse drive, so no gameplay code needs to know which is in use:
+
+* A **floating thumbstick** spawns wherever the left thumb lands and feeds an analog movement axis,
+  with a small deadzone so a resting thumb does not creep forward.
+* The **right half aims**, feeding the same look deltas pointer lock produces on a desktop. The drag
+  state survives one extra frame so a flick that lifts off between frames still turns the camera.
+* **Action buttons** occupy the right thumb's arc; crouch and sprint latch rather than requiring a held
+  finger. Utility calls (artillery, air, drone, squad orders) are pills along the top, clear of both
+  thumbs, and display their remaining count.
+* The **command map** switches the same gestures to pan and pinch, with a toolbar for select, order,
+  artillery and air, because there is no right mouse button.
+
+### 4.4 Difficulty and AI fairness
 
 The AI is deliberately handicapped against the player, because a simulation that is fair to twenty-six
 soldiers is not fair to one. Four presets (Recruit, Regular, Veteran, Elite) control:
@@ -132,7 +147,7 @@ soldiers is not fair to one. Four presets (Recruit, Regular, Veteran, Elite) con
 * **Spotting, suppression and spawn protection.** A lone crouched player is spotted at shorter range than
   a vehicle, bots under fire shoot 45% worse, and redeploying grants a short grace period.
 
-### 4.4 Battle rules
+### 4.5 Battle rules
 * Three capture points (A/B/C) between the attacker spawn and the defender spawn.
 * Both sides have **tickets** derived from their army strength. Deaths cost tickets; holding a
   majority of points bleeds the enemy.
@@ -141,7 +156,7 @@ soldiers is not fair to one. Four presets (Recruit, Regular, Veteran, Elite) con
   reaches the contested province during the fight, reinforcements arrive: extra tickets and a
   fresh squad. *Holding a bridge for twenty minutes really does buy your map time.*
 
-### 4.5 Strategy → FPS modifiers
+### 4.6 Strategy → FPS modifiers
 
 | Strategic state | FPS effect |
 | --- | --- |
@@ -154,7 +169,7 @@ soldiers is not fair to one. Four presets (Recruit, Regular, Veteran, Elite) con
 | Organisation | AI ally morale (cover-seeking, retreat threshold) |
 | Terrain type | battlefield generator preset |
 
-### 4.6 FPS → Strategy
+### 4.7 FPS → Strategy
 * Victory: province captured (attacking) or held (defending); loser suffers casualties scaled to
   tickets lost.
 * Defeat: army retreats with heavy losses.

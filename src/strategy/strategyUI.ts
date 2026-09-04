@@ -155,6 +155,7 @@ export class StrategyUI {
   private renderProvince() {
     if (this.selectedProvince === null) {
       this.provincePanel.style.display = 'none';
+      this.root.classList.remove('sheet-open');
       return;
     }
     const p = this.sim.world.provinces[this.selectedProvince];
@@ -203,6 +204,7 @@ export class StrategyUI {
     // identity is the province alone: armies arriving or leaving must not dump the reader at the top
     this.renderInto(this.provincePanel, html, `p${p.id}`);
     this.provincePanel.style.display = '';
+    this.root.classList.add('sheet-open');
   }
 
   private armyRow(a: Army): string {
@@ -218,6 +220,7 @@ export class StrategyUI {
   private renderSide() {
     if (!this.activeTab) {
       this.sidePanel.style.display = 'none';
+      this.root.classList.remove('tab-open');
       return;
     }
     const n = this.sim.player;
@@ -299,6 +302,7 @@ export class StrategyUI {
     }
     this.renderInto(this.sidePanel, html, this.activeTab ?? '');
     this.sidePanel.style.display = '';
+    this.root.classList.add('tab-open');
   }
 
   private researchRate(): number {

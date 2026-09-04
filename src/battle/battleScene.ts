@@ -21,6 +21,8 @@ import { Input } from './input';
 import type { BattleWorld, Combatant, GasCloud } from './combat';
 import { audio } from '../audio/audio';
 import { getDifficulty } from './difficulty';
+import { TouchControls } from './touchControls';
+import { device } from '../core/device';
 
 const SURNAMES: Record<string, string[]> = {
   en: ['Walker', 'Hughes', 'Bennett', 'Carter', 'Fletcher', 'Harris', 'Morgan', 'Price', 'Reid', 'Turner', 'Wallace', 'Young', 'Cooper', 'Mason', 'Ellis', 'Grant'],
@@ -103,6 +105,7 @@ export class BattleScene {
   private lastPlayerDeathReason = '';
   private reportShown = false;
   private frameHandle = 0;
+  private touch: TouchControls | null = null;
 
   constructor(readonly renderer: THREE.WebGLRenderer, readonly uiRoot: HTMLElement, readonly setup: BattleSetup, readonly onEnd: (r: BattleResult) => void) {
     this.rng = new RNG(setup.seed);
@@ -214,7 +217,17 @@ export class BattleScene {
     this.pointerHint.className = 'pointer-hint';
     this.pointerHint.innerHTML = 'CLICK TO TAKE CONTROL<small>Esc pauses · Tab opens the command map</small>';
     this.pointerHint.addEventListener('click', () => this.input.requestLock());
-    uiRoot.appendChild(this.pointerHint);
+    if (!device.touch) uiRoot.appendChild(this.pointerHint);
+    if (device.touch) {
+      this.touch = new TouchControls(uiRoot, this.input, {
+        era: setup.era.id,
+        role: setup.role,
+        kit: setup.kit,
+        hasDrone: setup.supply.drone,
+      });
+      this.touch.onPause = () => (this.paused ? this.resume() : this.pause());
+      this.touch.onToggleMap = () => (this.commander.active ? this.exitCommander() : this.enterCommander());
+    }
     // Browsers swallow the Esc keydown that exits pointer lock, so treat lock loss as the pause request.
     this.input.onLockLost = () => {
       if (this.ended || this.paused || this.mode === 'commander' || !this.player.alive || this.time < 0.5) return;
@@ -430,6 +443,7 @@ export class BattleScene {
       this.mode = 'tank';
       this.tankCam.yaw = t.yaw;
       this.hud.setMode('tank');
+      this.touch?.setMode('tank');
       this.hud.showMessage(this.setup.playerNation.tankName.toUpperCase(), 'W/S drive · A/D steer · LMB main gun · RMB coaxial MG', 4);
     } else {
       this.player.spawn(pos, yaw);
@@ -438,6 +452,7 @@ export class BattleScene {
         this.mode = 'fps';
         this.hud.setMode('fps');
       }
+      this.touch?.setMode('fps');
     }
     this.player.alive = true;
   }
@@ -621,6 +636,7 @@ export class BattleScene {
   // ---------------------------------------------------------------- modes
   private enterCommander() {
     this.mode = 'commander';
+    this.touch?.setMode('commander');
     this.commander.enter();
     this.player.controlEnabled = false;
     this.hud.setMode('commander');
@@ -638,18 +654,21 @@ export class BattleScene {
       this.hud.setMode('fps');
     }
     this.hud.setMinimapVisible(true);
-    this.input.requestLock();
+    this.touch?.setMode(this.mode === 'tank' ? 'tank' : 'fps');
+    if (!device.touch) this.input.requestLock();
   }
   private pause() {
     if (this.ended) return;
     this.paused = true;
     this.hud.showPause(true);
+    this.touch?.setVisible(false);
     this.input.releaseLock();
   }
   private resume() {
     this.paused = false;
     this.hud.showPause(false);
-    if (this.mode !== 'commander') this.input.requestLock();
+    this.touch?.setVisible(true);
+    if (this.mode !== 'commander' && !device.touch) this.input.requestLock();
   }
 
   private aspect() {
@@ -662,6 +681,7 @@ export class BattleScene {
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     this.composer.setSize(w, h);
+    this.commander.renderHeight = h;
     this.commander.resize(w / h);
   }
 
@@ -681,7 +701,7 @@ export class BattleScene {
       else this.pause();
     }
     // pointer lock lost -> pause (only in FPS/tank mode)
-    if (!this.paused && this.mode !== 'commander' && !input.locked && this.player.alive && this.time > 1) {
+    if (!device.touch && !this.paused && this.mode !== 'commander' && !input.locked && this.player.alive && this.time > 1) {
       this.pointerHint.style.display = '';
     } else this.pointerHint.style.display = 'none';
     if (this.paused) {
@@ -718,9 +738,9 @@ export class BattleScene {
       this.player.viewRoot.visible = false;
       this.playerTank.controlUpdate(dt, input, this.camera, this.tankCam);
       this.player.pos.copy(this.playerTank.pos);
-      if (input.mousePressed(0) && !input.locked) input.requestLock();
+      if (!device.touch && input.mousePressed(0) && !input.locked) input.requestLock();
     } else {
-      if (input.mousePressed(0) && !input.locked && this.player.alive) input.requestLock();
+      if (!device.touch && input.mousePressed(0) && !input.locked && this.player.alive) input.requestLock();
       this.player.update(dt, now);
     }
     if (this.mode === 'commander') this.player.viewRoot.visible = false;
@@ -776,7 +796,7 @@ export class BattleScene {
         if (this.tickets.player > 0) {
           this.deployPlayer();
           this.hud.showDead(0, '');
-          if (this.mode === 'fps') input.requestLock();
+          if (this.mode === 'fps' && !device.touch) input.requestLock();
         }
       }
     } else this.hud.showDead(0, '');
@@ -826,6 +846,7 @@ export class BattleScene {
       ];
       if (this.setup.era.id === 'modern') slots.push({ key: '7', name: 'Recon drone', count: this.drones, ready: this.cooldowns.drone <= 0, cooldown: this.cooldowns.drone });
       this.hud.setSupport(slots);
+      this.touch?.setSupport(slots);
       const mySquad = this.squads.find((s) => s.isPlayerSquad);
       if (mySquad) this.hud.setSquad(mySquad.mode === 'follow' ? 'Following you' : mySquad.mode === 'hold' ? 'Holding position' : 'Attacking marked position', mySquad.alive.length, mySquad.members.length);
       else if (this.setup.role === 'commander') this.hud.setSquad(`${this.squads.filter((s) => s.team === 'player' && s.alive.length).length} squads under command`, this.soldiers.filter((s) => s.alive && s.team === 'player').length, 0);
@@ -861,6 +882,7 @@ export class BattleScene {
     this.input.releaseLock();
     this.hud.showPause(false);
     this.pointerHint.style.display = 'none';
+    this.touch?.setVisible(false);
     audio.stopAmbience();
     const result: BattleResult = {
       won,
@@ -882,6 +904,7 @@ export class BattleScene {
 
   dispose() {
     cancelAnimationFrame(this.frameHandle);
+    this.touch?.dispose();
     this.input.dispose();
     this.hud.dispose();
     this.pointerHint.remove();

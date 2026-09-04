@@ -49,8 +49,9 @@ export class CommanderMode {
     this.pendingAction = null;
   }
 
-  private groundPoint(): THREE.Vector3 | null {
-    this.raycaster.setFromCamera(this.input.mouseNDC, this.camera);
+  private groundPoint(ndc: THREE.Vector2 = this.input.mouseNDC): THREE.Vector3 | null {
+    this.camera.updateMatrixWorld();
+    this.raycaster.setFromCamera(ndc, this.camera);
     const hits = this.raycaster.intersectObject(this.field.terrainMesh, false);
     return hits.length ? hits[0].point : null;
   }
@@ -63,6 +64,9 @@ export class CommanderMode {
     this.markers.add(m);
     setTimeout(() => this.markers.remove(m), 6000);
   }
+
+  /** Viewport height in pixels, so touch drags pan by the right amount. */
+  renderHeight = 900;
 
   update(dt: number, aspect: number) {
     if (!this.active) return;
@@ -78,11 +82,19 @@ export class CommanderMode {
     this.camera.position.set(this.center.x, 300, this.center.y);
     this.camera.lookAt(this.center.x, 0, this.center.y);
     this.resize(aspect);
+    // touch: one finger drags the map, two fingers pinch to zoom
+    if (this.input.pinchDelta) this.zoom = Math.max(0.8, Math.min(3, this.zoom * (1 + this.input.pinchDelta)));
+    if (this.input.dragX || this.input.dragY) {
+      const scale = (HALF / this.zoom) / (this.renderHeight * 0.5);
+      this.center.x -= this.input.dragX * scale;
+      this.center.y -= this.input.dragY * scale;
+    }
     if (this.input.pressed('KeyZ')) this.pendingAction = this.pendingAction === 'artillery' ? null : 'artillery';
     if (this.input.pressed('KeyX')) this.pendingAction = this.pendingAction === 'air' ? null : 'air';
     if (this.input.pressed('Escape')) this.pendingAction = null;
-    if (this.input.mousePressed(0)) {
-      const p = this.groundPoint();
+    const tap = this.input.tap;
+    if (this.input.mousePressed(0) || (tap && tap.button === 0)) {
+      const p = this.groundPoint(tap ? new THREE.Vector2(tap.x, tap.y) : undefined);
       if (p) {
         if (this.pendingAction === 'artillery') {
           if (this.onArtillery?.(p)) this.addOrderMarker(p, 0xffb040);
@@ -107,8 +119,8 @@ export class CommanderMode {
         }
       }
     }
-    if (this.input.mousePressed(2) && this.selectedSquad) {
-      const p = this.groundPoint();
+    if ((this.input.mousePressed(2) || (tap && tap.button === 2)) && this.selectedSquad) {
+      const p = this.groundPoint(tap ? new THREE.Vector2(tap.x, tap.y) : undefined);
       if (p) {
         this.onOrder?.(this.selectedSquad, p);
         this.addOrderMarker(p, 0x6fb8ff);

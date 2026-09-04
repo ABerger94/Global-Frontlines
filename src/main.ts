@@ -9,6 +9,7 @@ import { Menu } from './ui/menu';
 import { BattleScene } from './battle/battleScene';
 import type { BattleSetup, BattleResult } from './battle/types';
 import { audio } from './audio/audio';
+import { device, applyDeviceClasses } from './core/device';
 
 type Screen = 'menu' | 'strategy' | 'battle';
 
@@ -26,6 +27,8 @@ class App {
   private clock = new THREE.Clock();
   private dayAccum = 0;
   private mouseDown: { x: number; y: number } | null = null;
+  private touchCount = 0;
+  private orientationHint: HTMLElement | null = null;
   private menuGlobe: GlobeScene | null = null;
   private loadingEl: HTMLElement | null = null;
 
@@ -34,26 +37,40 @@ class App {
     this.ui = document.getElementById('ui')!;
     this.labels = document.getElementById('labels')!;
     this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true, powerPreference: 'high-performance' });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    // phones gain far more from a stable frame rate than from extra pixels
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, device.lowPower ? 1.5 : 2));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    applyDeviceClasses();
+    this.buildOrientationHint();
     this.menu = new Menu(this.ui, (era, nation) => this.startCampaign(era, nation));
     setTimeout(() => this.buildMenuGlobe(), 30);
     window.addEventListener('resize', () => this.resize());
-    this.canvas.addEventListener('mousedown', (e) => (this.mouseDown = { x: e.clientX, y: e.clientY }));
-    this.canvas.addEventListener('mouseup', (e) => {
+    this.canvas.addEventListener('pointerdown', (e) => {
+      this.mouseDown = { x: e.clientX, y: e.clientY };
+      this.touchCount++;
+    });
+    this.canvas.addEventListener('pointerup', (e) => {
+      const multi = this.touchCount > 1;
+      this.touchCount = Math.max(0, this.touchCount - 1);
       if (this.screen !== 'strategy' || !this.mouseDown || !this.globe || !this.stratUI) return;
       const dx = e.clientX - this.mouseDown.x;
       const dy = e.clientY - this.mouseDown.y;
       this.mouseDown = null;
-      if (dx * dx + dy * dy > 25 || e.button !== 0) return;
+      // a finger is less steady than a mouse, and a pinch must never select
+      const slop = e.pointerType === 'touch' ? 144 : 25;
+      if (multi || dx * dx + dy * dy > slop || e.button !== 0) return;
       const p = this.globe.pickProvince((e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1);
       this.stratUI.handleGlobeClick(p);
     });
-    this.canvas.addEventListener('mousemove', (e) => {
-      if (this.screen !== 'strategy' || !this.globe || !this.stratUI) return;
+    this.canvas.addEventListener('pointercancel', () => {
+      this.mouseDown = null;
+      this.touchCount = Math.max(0, this.touchCount - 1);
+    });
+    this.canvas.addEventListener('pointermove', (e) => {
+      if (e.pointerType === 'touch' || this.screen !== 'strategy' || !this.globe || !this.stratUI) return;
       const p = this.globe.pickProvince((e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1);
       this.stratUI.handleGlobeHover(p);
     });
@@ -89,6 +106,22 @@ class App {
     this.globe?.resize(w, h);
     this.menuGlobe?.resize(w, h);
     this.battle?.resize();
+  }
+
+  /** Phones need landscape for the shooter; the globe is fine either way. */
+  private buildOrientationHint() {
+    const el = document.createElement('div');
+    el.className = 'orientation-hint';
+    el.innerHTML = '<div><h2>Rotate your device</h2><p>The battlefield needs landscape.</p></div>';
+    this.ui.appendChild(el);
+    this.orientationHint = el;
+    const sync = () => {
+      const show = device.touch && device.portrait && this.screen === 'battle';
+      el.classList.toggle('on', show);
+    };
+    window.addEventListener('resize', sync);
+    window.addEventListener('orientationchange', () => setTimeout(sync, 150));
+    setInterval(sync, 600);
   }
 
   private showLoading(title: string, text: string) {
