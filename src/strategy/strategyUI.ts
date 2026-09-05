@@ -7,6 +7,7 @@ import { KIT_INFO, ROLE_INFO } from '../data/eras';
 import { WEAPONS } from '../data/weapons';
 import { fmtNum } from '../core/math';
 import { audio } from '../audio/audio';
+import { device } from '../core/device';
 import { DIFFICULTIES, DEFAULT_DIFFICULTY } from '../battle/difficulty';
 
 export interface StrategyUICallbacks {
@@ -62,9 +63,11 @@ export class StrategyUI {
     this.logEl = document.createElement('div');
     this.logEl.className = 'log';
     try {
-      this.logCollapsed = localStorage.getItem('gf.logCollapsed') === '1';
+      const stored = localStorage.getItem('gf.logCollapsed');
+      // on a phone the log would cover the map, so it starts folded away
+      this.logCollapsed = stored === null ? device.narrow : stored === '1';
     } catch {
-      /* private browsing */
+      this.logCollapsed = device.narrow;
     }
     this.toastHost = document.createElement('div');
     this.toastHost.className = 'toasts';
@@ -628,7 +631,7 @@ export class StrategyUI {
     const n = this.sim.player;
     const el = document.createElement('div');
     el.className = 'gameover ' + (won ? 'win' : 'loss');
-    el.innerHTML = `<h1>${won ? 'Victory' : 'Defeat'}</h1><p>${reason}</p><p class="muted">${n.def.name} · ${this.sim.dateString()} · ${this.sim.provincesOf(n.id).length} provinces · ${fmtNum(n.kills)} enemy casualties inflicted · ${fmtNum(n.casualties)} suffered</p><button class="btn primary big">Return to Main Menu</button>`;
+    el.innerHTML = `<div class="gameover-box"><h1>${won ? 'Victory' : 'Defeat'}</h1><p>${reason}</p><p class="muted">${n.def.name} · ${this.sim.dateString()} · ${this.sim.provincesOf(n.id).length} provinces · ${fmtNum(n.kills)} enemy casualties inflicted · ${fmtNum(n.casualties)} suffered</p><button class="btn primary big">Return to Main Menu</button></div>`;
     el.querySelector('button')!.addEventListener('click', onMenu);
     this.modalHost.appendChild(el);
   }

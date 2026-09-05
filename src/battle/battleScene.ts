@@ -881,6 +881,9 @@ export class BattleScene {
     this.ended = true;
     this.input.releaseLock();
     this.hud.showPause(false);
+    this.hud.showDead(0, '');
+    this.hud.showMessage('', '', 0);
+    this.hud.setHint('');
     this.pointerHint.style.display = 'none';
     this.touch?.setVisible(false);
     audio.stopAmbience();
