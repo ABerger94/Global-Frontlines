@@ -109,8 +109,13 @@ kbd { font-family: var(--font-mono); background: rgba(255,255,255,0.1); border: 
 
 .panel { position: absolute; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; backdrop-filter: blur(8px); box-shadow: 0 10px 40px rgba(0,0,0,0.4); }
 .panel h3 { font-size: 16px; padding: 10px 14px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 8px; }
-.panel h3 .close { margin-left: auto; cursor: pointer; color: var(--muted); font-size: 18px; line-height: 1; }
-.panel h3 .close:hover { color: #fff; }
+.panel h3 .close { margin-left: auto; flex: none; background: none; border: none; padding: 0; font-family: inherit; display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; margin-right: -8px; border-radius: 6px; cursor: pointer; color: var(--muted); font-size: 21px; line-height: 1; user-select: none; transition: background 0.12s, color 0.12s; }
+.panel h3 .close:hover { color: #fff; background: rgba(255,255,255,0.12); }
+.panel h3 .close:active { background: rgba(255,255,255,0.22); color: #fff; }
+.panel h3 .close:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+/* a finger needs a target it can actually hit */
+.is-touch .panel h3 { padding: 6px 8px 6px 14px; }
+.is-touch .panel h3 .close { width: 44px; height: 44px; margin-right: 0; font-size: 26px; }
 .panel .body { padding: 12px 14px; font-size: 13px; }
 .province-panel { left: 16px; top: 74px; width: 300px; max-height: calc(100% - 360px); display: flex; flex-direction: column; }
 .province-panel .body { overflow-y: auto; overscroll-behavior: contain; }

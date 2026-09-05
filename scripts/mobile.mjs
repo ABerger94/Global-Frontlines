@@ -153,7 +153,30 @@ try {
   console.log('diplomacy sheet', tab);
   if (!tab.fits) fail('diplomacy sheet does not fit the screen');
   await shot('05-diplomacy');
-  await page.tap('[data-act=closeTab]');
+  // the close button must be a comfortable target and must survive a redraw
+  const closeBox = await page.locator('.side-panel .close').boundingBox();
+  console.log('close button', closeBox && { w: Math.round(closeBox.width), h: Math.round(closeBox.height) });
+  if (!closeBox || closeBox.width < 40 || closeBox.height < 40) fail('the close button is too small for a finger: ' + JSON.stringify(closeBox));
+  await page.evaluate(() => {
+    const b = document.querySelector('.side-panel .close');
+    const r = b.getBoundingClientRect();
+    const o = (t) => new PointerEvent(t, { pointerId: 9, pointerType: 'touch', isPrimary: true, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, bubbles: true, cancelable: true });
+    b.dispatchEvent(o('pointerdown'));
+    for (let i = 0; i < 4; i++) window.__gf.sim.events.emit('dirty');
+  });
+  await page.waitForTimeout(450);
+  const stillThere = await page.evaluate(() => !!document.querySelector('.side-panel .close'));
+  if (!stillThere) fail('the close button vanished while a finger was on it');
+  await page.evaluate(() => {
+    const b = document.querySelector('.side-panel .close');
+    b.dispatchEvent(new PointerEvent('pointerup', { pointerId: 9, pointerType: 'touch', isPrimary: true, bubbles: true, cancelable: true }));
+    b.click();
+  });
+  await page.waitForTimeout(400);
+  const tapClosed = await page.evaluate(() => window.__gf.stratUI.activeTab === null);
+  console.log('close on touch', { stillThere, tapClosed });
+  if (!tapClosed) fail('tapping close did not close the panel');
+  if (await page.locator('[data-act=closeTab]').count()) await page.tap('[data-act=closeTab]');
 
   // --- into a battle
   await page.evaluate(() => {
