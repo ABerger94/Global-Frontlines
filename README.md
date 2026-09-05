@@ -92,6 +92,10 @@ The headless smoke test uses `playwright-core` and needs a Chromium binary. Set 
 | `5` / `6` / `7` | Artillery / air support / recon drone |
 | `G` / `N` | Gas mask (WWI) / night vision (modern) |
 | `Tab` | Command map: select squads, right-click to order, `Z`+click artillery, `X`+click air |
+
+In a tank the camera chases the hull from behind and above: `W`/`S` drive, `A`/`D` steer, the mouse
+swings the turret, `LMB` fires the main gun and `RMB` the coaxial machine gun. The gun shoots where the
+crosshair points. On a phone the thumbstick drives, dragging aims, and FIRE and AIM are the two guns.
 | `Esc` | Pause / withdraw |
 
 **Difficulty.** Before deploying you pick a combat difficulty, remembered between battles. It controls

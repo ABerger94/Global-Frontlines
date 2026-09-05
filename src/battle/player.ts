@@ -520,6 +520,21 @@ export class Player implements Combatant {
     audio.click(0.8);
   }
 
+  /**
+   * Hand the camera to a vehicle. The camera is normally a child of a holder the
+   * player drives, so the holder must be reset to the identity or a vehicle's
+   * world-space camera placement lands somewhere else entirely.
+   */
+  releaseCamera() {
+    this.cameraHolder.position.set(0, 0, 0);
+    this.cameraHolder.rotation.set(0, 0, 0);
+    this.cameraHolder.updateMatrixWorld(true);
+    this.camera.rotation.set(0, 0, 0);
+    this.camera.fov = this.baseFov;
+    this.camera.updateProjectionMatrix();
+    this.viewRoot.visible = false;
+  }
+
   updateCamera(dt: number, speedNorm = 0) {
     const targetEye = this.crouching ? 1.1 : 1.62;
     this.eyeHeight += (targetEye - this.eyeHeight) * Math.min(1, dt * 10 || 1);

@@ -12,6 +12,7 @@ function chromePath() {
 const PORT = Number(process.env.PORT || 4260);
 const OUT = process.env.OUT || 'scripts/out/mobile';
 const PORTRAIT = process.env.PORTRAIT === '1';
+const KIT = process.env.KIT || '';
 mkdirSync(OUT, { recursive: true });
 const server = spawn('npx', ['vite', 'preview', '--port', String(PORT), '--strictPort'], { stdio: 'pipe', detached: true });
 await new Promise((r) => setTimeout(r, 2500));
@@ -158,6 +159,7 @@ try {
   await page.evaluate(() => {
     const app = window.__gf;
     const sim = app.sim;
+    for (const t of sim.era.techs) sim.player.techs.add(t.id);
     const enemyLand = (q) => q.isLand && q.owner && q.owner !== sim.playerId && !sim.isAllied(sim.playerId, q.owner) && (q.owner === 'minor' || sim.player.wars.has(q.owner));
     for (const a of sim.armiesOf(sim.playerId)) {
       const here = sim.world.provinces[a.province];
@@ -170,6 +172,7 @@ try {
   await shot('06-prompt');
   await page.tap('[data-battle=command]');
   await page.waitForTimeout(300);
+  if (KIT && (await page.$(`[data-kit=${KIT}]:not(.locked)`))) await page.tap(`[data-kit=${KIT}]`);
   await page.tap('[data-battle=deploy]');
   await page.waitForSelector('.touch-ui', { timeout: 30000 });
   await page.waitForTimeout(4000);
@@ -226,7 +229,61 @@ try {
   if (!layout.fire?.onScreen) fail('fire button is off screen');
   if (!layout.sys?.onScreen) fail('map/pause buttons are off screen');
 
+  if (KIT === 'tank') {
+    const t0 = await page.evaluate(() => {
+      const b = window.__gf.battle;
+      const t = b.playerTank;
+      if (!t) return { missing: true };
+      const V = b.camera.position.constructor;
+      const p = b.camera.getWorldPosition(new V());
+      const dir = b.camera.getWorldDirection(new V());
+      const proj = t.pos.clone().add(new V(0, 1.5, 0)).project(b.camera);
+      return {
+        mode: b.mode,
+        dist: +p.distanceTo(t.pos).toFixed(2),
+        above: +(p.y - t.pos.y).toFixed(2),
+        lookingDown: +dir.y.toFixed(3),
+        onScreen: Math.abs(proj.x) < 0.4 && Math.abs(proj.y) < 0.9,
+        fire: !!document.querySelector('.tc-fire'),
+        stick: !!document.querySelector('.tc-stick-zone'),
+        tankClass: document.querySelector('.touch-ui').classList.contains('mode-tank'),
+      };
+    });
+    console.log('tank camera', t0);
+    if (t0.missing) fail('tank kit did not put the player in a tank');
+    else {
+      if (t0.dist < 6 || t0.dist > 20) fail(`tank camera is not a chase camera: ${t0.dist}m`);
+      if (t0.above < 1 || t0.above > 10) fail(`tank camera height wrong: ${t0.above}m`);
+      if (t0.lookingDown < -0.6) fail(`tank camera is a birdseye view: ${t0.lookingDown}`);
+      if (!t0.onScreen) fail('the tank is not visible from its own camera');
+      if (!t0.tankClass || !t0.fire || !t0.stick) fail('tank touch controls are missing: ' + JSON.stringify(t0));
+    }
+    // drive with the thumbstick
+    const stickPt2 = [Math.round(env.w * 0.22), Math.round(env.h - 60)];
+    const before = await page.evaluate(() => ({ ...window.__gf.battle.playerTank.pos }));
+    await drag(stickPt2[0], stickPt2[1], stickPt2[0], stickPt2[1] - 60, 6);
+    await waitGameTime(2.0);
+    const after = await page.evaluate(() => ({ ...window.__gf.battle.playerTank.pos }));
+    await release(stickPt2[0], stickPt2[1] - 60);
+    const drove = Math.hypot(after.x - before.x, after.z - before.z);
+    console.log('tank driving', { drove: +drove.toFixed(2) });
+    if (drove < 2) fail('the thumbstick did not drive the tank: ' + drove.toFixed(2));
+    // the camera must still be behind the hull after moving
+    const t1 = await page.evaluate(() => {
+      const b = window.__gf.battle;
+      const V = b.camera.position.constructor;
+      const p = b.camera.getWorldPosition(new V());
+      return { dist: +p.distanceTo(b.playerTank.pos).toFixed(2) };
+    });
+    console.log('tank camera after driving', t1);
+    if (t1.dist < 6 || t1.dist > 20) fail(`the camera lost the tank while driving: ${t1.dist}m`);
+    await shot('07b-tank');
+  }
+
   // --- thumbstick moves the player
+  if (KIT === 'tank') {
+    await shot('08-firing');
+  } else {
   // make sure the subject is alive and standing before measuring movement and look
   await page.evaluate(() => {
     const b = window.__gf.battle;
@@ -291,6 +348,7 @@ try {
   if (clash.supportShown) fail('the support readout duplicates the on-screen buttons');
   if (!/\d|—/.test(clash.artyLabel || '')) fail('support buttons do not show their remaining count: ' + clash.artyLabel);
   await shot('08-firing');
+  }
 
   // --- command map via the MAP button
   await page.evaluate(() => {

@@ -27,6 +27,7 @@ export class Tank implements Combatant {
   private turret: THREE.Group;
   private barrel: THREE.Mesh;
   private muzzle = new THREE.Object3D();
+  private gun = new THREE.Group();
   private speed = 0;
   private reload = 0;
   shells = 30;
@@ -62,9 +63,12 @@ export class Tank implements Combatant {
     tur.position.y = 0.4;
     this.barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.13, 4.2, 8), dark);
     this.barrel.rotation.x = Math.PI / 2;
-    this.barrel.position.set(0, 0.45, -2.6);
-    this.muzzle.position.set(0, 0.45, -4.7);
-    this.turret.add(tur, this.barrel, this.muzzle);
+    this.barrel.position.set(0, 0, -2.6);
+    this.muzzle.position.set(0, 0, -4.7);
+    // barrel and muzzle share a group so the gun can elevate as one piece
+    this.gun.position.y = 0.45;
+    this.gun.add(this.barrel, this.muzzle);
+    this.turret.add(tur, this.gun);
     this.turret.position.y = 1.55;
     this.group.add(hull, glacis, trackL, trackR, this.turret);
     this.group.traverse((o) => {
@@ -94,13 +98,15 @@ export class Tank implements Combatant {
     }
   }
 
-  fireCannon(): boolean {
+  fireCannon(aimPoint?: THREE.Vector3): boolean {
     if (this.reload > 0 || this.shells <= 0 || !this.alive) return false;
     this.reload = 4;
     this.shells--;
     const from = new THREE.Vector3();
     this.muzzle.getWorldPosition(from);
-    const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(this.turret.getWorldQuaternion(new THREE.Quaternion()));
+    const dir = aimPoint
+      ? aimPoint.clone().sub(from).normalize()
+      : new THREE.Vector3(0, 0, -1).applyQuaternion(this.gun.getWorldQuaternion(new THREE.Quaternion()));
     this.support.spawnShell(from, dir.multiplyScalar(130), 170, 7, this, 1.5, 4);
     this.world.effects.muzzleFlash(from, true);
     this.world.effects.explosion(from, 0.35);
@@ -167,41 +173,72 @@ export class Tank implements Combatant {
   }
 
   /** Player control: WASD drive, mouse turret, LMB cannon, RMB MG. Camera third person. */
+  /**
+   * Player driving. The camera orbits behind and slightly above the hull and
+   * looks down its own axis, so the crosshair sits on the ground ahead of the
+   * tank rather than on the tank itself, and the gun fires where it points.
+   */
   controlUpdate(dt: number, input: Input, camera: THREE.PerspectiveCamera, camPitchRef: { yaw: number; pitch: number }) {
     if (!this.alive) return;
     const axis = input.moveAxis();
     this.drive(dt, axis.y, -axis.x);
     if (input.locked || input.touchLook) {
       camPitchRef.yaw -= input.mouseDX * 0.0022;
-      camPitchRef.pitch = clamp(camPitchRef.pitch - input.mouseDY * 0.0022, -0.5, 0.9);
+      // same sense as on foot: drag down to look down, which lifts the camera
+      camPitchRef.pitch = clamp(camPitchRef.pitch - input.mouseDY * 0.0022, -0.5, 0.22);
     }
-    // turret follows camera yaw
-    let d = camPitchRef.yaw - this.turretYaw;
-    d = Math.atan2(Math.sin(d), Math.cos(d));
-    this.turretYaw += clamp(d, -dt * 1.6, dt * 1.6);
-    this.turret.rotation.y = this.turretYaw - this.yaw;
-    // camera
-    const back = new THREE.Vector3(Math.sin(camPitchRef.yaw), 0, Math.cos(camPitchRef.yaw));
-    const anchor = this.pos.clone().add(new THREE.Vector3(0, 2.6, 0));
-    const camPos = this.pos.clone().add(back.multiplyScalar(11)).add(new THREE.Vector3(0, 5 + camPitchRef.pitch * 6, 0));
-    // pull the camera in if a building or the terrain is in the way
+    const yaw = camPitchRef.yaw;
+    const p = camPitchRef.pitch;
+    const cp = Math.cos(p);
+    // the direction the player is looking
+    const look = new THREE.Vector3(-Math.sin(yaw) * cp, Math.sin(p), -Math.cos(yaw) * cp);
+    const anchor = this.pos.clone().add(new THREE.Vector3(0, 2.3, 0));
+    const dist = 12;
+    const camPos = anchor.clone().addScaledVector(look, -dist).add(new THREE.Vector3(0, 1.2, 0));
+    // pull in if terrain or a building is between the tank and the camera
     const toCam = camPos.clone().sub(anchor);
-    const wantDist = toCam.length();
-    const hit = this.world.field.raycast(anchor, toCam.clone().normalize(), wantDist);
-    if (hit < wantDist) camPos.copy(anchor).addScaledVector(toCam.normalize(), Math.max(2.5, hit - 0.8));
-    const gy = this.world.field.heightAt(camPos.x, camPos.z) + 1.2;
-    if (camPos.y < gy) camPos.y = gy;
-    camera.position.lerp(camPos, Math.min(1, dt * 8));
-    const look = this.pos.clone().add(new THREE.Vector3(0, 2, 0)).add(new THREE.Vector3(-Math.sin(camPitchRef.yaw), 0, -Math.cos(camPitchRef.yaw)).multiplyScalar(20));
-    look.y -= camPitchRef.pitch * 10;
-    camera.lookAt(look);
-    if (input.mousePressed(0)) this.fireCannon();
-    if (input.mouseDown(2)) {
-      const dir = new THREE.Vector3(-Math.sin(this.turretYaw), -0.05, -Math.cos(this.turretYaw));
-      const from = new THREE.Vector3();
-      this.muzzle.getWorldPosition(from);
-      this.fireMG(from.clone().addScaledVector(dir, 60));
+    const want = toCam.length();
+    const hit = this.world.field.raycast(anchor, toCam.clone().normalize(), want);
+    if (hit < want) camPos.copy(anchor).addScaledVector(toCam.normalize(), Math.max(3.5, hit - 0.6));
+    const ground = this.world.field.heightAt(camPos.x, camPos.z) + 1.0;
+    if (camPos.y < ground) camPos.y = ground;
+    camera.position.lerp(camPos, Math.min(1, dt * 12));
+    camera.lookAt(anchor.clone().addScaledVector(look, 60));
+
+    // where the crosshair lands, and therefore where the gun shoots
+    const aim = this.aimPoint(camera);
+    // turret tracks the aim, the gun elevates to match
+    const wantYaw = Math.atan2(-(aim.x - this.pos.x), -(aim.z - this.pos.z));
+    let d = wantYaw - this.turretYaw;
+    d = Math.atan2(Math.sin(d), Math.cos(d));
+    this.turretYaw += clamp(d, -dt * 1.8, dt * 1.8);
+    this.turret.rotation.y = this.turretYaw - this.yaw;
+    const flat = Math.hypot(aim.x - this.pos.x, aim.z - this.pos.z);
+    const elev = clamp(Math.atan2(aim.y - (this.pos.y + 2.0), Math.max(1, flat)), -0.18, 0.3);
+    this.gun.rotation.x += clamp(-elev - this.gun.rotation.x, -dt * 1.5, dt * 1.5);
+
+    if (input.mousePressed(0)) this.fireCannon(aim);
+    if (input.mouseDown(2)) this.fireMG(aim);
+  }
+
+  /** First thing the camera's centre line meets, or a point far downrange. */
+  private aimPoint(camera: THREE.PerspectiveCamera): THREE.Vector3 {
+    const origin = new THREE.Vector3();
+    camera.getWorldPosition(origin);
+    const dir = new THREE.Vector3();
+    camera.getWorldDirection(dir);
+    const maxDist = 400;
+    let best = this.world.field.raycast(origin, dir, maxDist);
+    for (const c of this.world.combatants) {
+      if (!c.alive || c === this || c.team === this.team) continue;
+      const centre = c.pos.clone();
+      centre.y += c.isVehicle ? 1.2 : 0.9;
+      const to = centre.clone().sub(origin);
+      const along = to.dot(dir);
+      if (along < 4 || along > best) continue;
+      if (to.sub(dir.clone().multiplyScalar(along)).length() < (c.isVehicle ? 2.5 : 1.1)) best = along;
     }
+    return origin.addScaledVector(dir, Math.min(best, maxDist));
   }
 
   update(dt: number, points: { pos: THREE.Vector3; owner: Team | null }[]) {

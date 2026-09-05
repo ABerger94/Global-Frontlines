@@ -26,6 +26,7 @@ const ALLTECH = process.env.ALLTECH === '1';
 const OUT = process.env.OUT || 'scripts/out';
 mkdirSync(OUT, { recursive: true });
 const shot = (name) => page.screenshot({ path: `${OUT}/${name}.png` });
+const shot2 = shot;
 // Advancing days during UI tests can trigger a battle prompt whose modal blocks clicks.
 const clearPrompt = async () => {
   if (await page.$('[data-battle=auto]')) {
@@ -295,6 +296,56 @@ try {
   const battleHit = await page.evaluate(() => document.elementFromPoint(720, 450)?.id || document.elementFromPoint(720, 450)?.className);
   console.log('battle element under cursor', battleHit);
   if (battleHit !== 'gl') errors.push('battle HUD intercepts mouse input: ' + battleHit);
+  // --- armour: the camera must sit behind and above the hull, looking past it
+  if (KIT === 'tank') {
+    const tank = await page.evaluate(() => {
+      const b = window.__gf.battle;
+      const t = b.playerTank ?? b['playerTank'];
+      if (!t) return { missing: true };
+      const cam = new (window.__gf.debug.THREE ?? Object)();
+      const p = b.camera.getWorldPosition(new b.camera.position.constructor());
+      const dir = b.camera.getWorldDirection(new b.camera.position.constructor());
+      // where the tank lands on screen
+      const proj = t.pos.clone().add(new b.camera.position.constructor(0, 1.5, 0)).project(b.camera);
+      return {
+        mode: b['mode'],
+        dist: +p.distanceTo(t.pos).toFixed(2),
+        above: +(p.y - t.pos.y).toFixed(2),
+        lookingDown: +dir.y.toFixed(3),
+        tankOnScreen: Math.abs(proj.x) < 0.4 && Math.abs(proj.y) < 0.9 && proj.z < 1,
+        tankScreenY: +proj.y.toFixed(2),
+      };
+    });
+    console.log('tank camera', tank);
+    if (tank.missing) errors.push('tank kit did not put the player in a tank');
+    else {
+      if (tank.dist < 6 || tank.dist > 20) errors.push(`tank camera is not a chase camera: ${tank.dist}m from the hull`);
+      if (tank.above < 1 || tank.above > 10) errors.push(`tank camera height is wrong: ${tank.above}m above the hull`);
+      if (tank.lookingDown < -0.6) errors.push(`tank camera is a birdseye view: looking down ${tank.lookingDown}`);
+      if (!tank.tankOnScreen) errors.push('the tank is not visible from its own camera');
+      if (tank.tankScreenY > 0.35) errors.push('the tank sits too high on screen, hiding the view ahead');
+    }
+    // the gun must shoot where the crosshair points
+    const shot = await page.evaluate(async () => {
+      const b = window.__gf.battle;
+      const t = b.playerTank;
+      const before = b.support['shells'].length;
+      const V = b.camera.position.constructor;
+      const camPos = b.camera.getWorldPosition(new V());
+      const camDir = b.camera.getWorldDirection(new V());
+      t.reload = 0;
+      t.fireCannon(camPos.clone().addScaledVector(camDir, 120));
+      const shells = b.support['shells'];
+      if (shells.length <= before) return { fired: false };
+      const s = shells[shells.length - 1];
+      const vel = s.vel.clone().normalize();
+      return { fired: true, alignment: +vel.dot(camDir).toFixed(3) };
+    });
+    console.log('tank gun', shot);
+    if (!shot.fired) errors.push('the tank cannon did not fire');
+    else if (shot.alignment < 0.985) errors.push(`shells do not follow the crosshair (alignment ${shot.alignment})`);
+    await shot2('09b-tank');
+  }
   await page.keyboard.press('Tab');
   await page.waitForTimeout(1500);
   await shot('10-commander');

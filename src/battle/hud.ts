@@ -3,6 +3,7 @@ import type { CapturePoint } from './terrain';
 import { HALF } from './terrain';
 import { pad2 } from '../core/math';
 import { getDifficulty } from './difficulty';
+import { device } from '../core/device';
 
 export interface SupportSlot {
   key: string;
@@ -200,7 +201,7 @@ export class HUD {
   setTankStats(hp: number, max: number, shells: number, reloading: boolean) {
     this.weaponName.textContent = 'MAIN GUN';
     this.ammo.innerHTML = `<b>${shells}</b><span>shells</span>`;
-    this.ammoState.textContent = reloading ? 'LOADING' : 'RMB: COAX MG';
+    this.ammoState.textContent = reloading ? 'LOADING' : device.touch ? 'AIM: COAX MG' : 'RMB: COAX MG';
     this.ammoState.className = 'hud-ammo-state ' + (reloading ? 'reloading' : 'ok');
     this.setHealth(hp, max);
   }
