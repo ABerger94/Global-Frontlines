@@ -26,6 +26,7 @@ npm run build      # production bundle in dist/
 npm run preview    # serve the production bundle
 npm run smoke      # headless Playwright walkthrough with screenshots (scripts/out/)
 npm run mobile     # the same walkthrough on a phone viewport, driving the touch controls
+                   # PORTRAIT=1 for portrait, VW/VH to pin an exact viewport
 ```
 
 Requirements: a modern browser with WebGL 2. Plays with mouse and keyboard on a desktop, and with
@@ -39,6 +40,8 @@ touch laptop, or `?touch=0` to force them off.
 **Strategy layer** works in either orientation. One finger drags the globe, two fingers pinch to zoom,
 and a tap selects a province. The panels become bottom sheets that scroll, and the top bar reflows into
 compact rows so nothing runs off the edge.
+
+The war log starts folded away on a phone so it does not cover the map; tap its header to open it.
 
 **Battle layer** wants landscape, and says so if you hold the phone upright. The left half of the screen
 is a floating thumbstick: put your thumb down anywhere and the stick appears there. The right half aims.

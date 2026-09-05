@@ -19,7 +19,7 @@ const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH 
 const phone = devices['Pixel 7'];
 const context = await browser.newContext({
   ...phone,
-  viewport: PORTRAIT ? { width: 412, height: 915 } : { width: 915, height: 412 },
+  viewport: process.env.VW ? { width: Number(process.env.VW), height: Number(process.env.VH) } : PORTRAIT ? { width: 412, height: 915 } : { width: 915, height: 412 },
   isMobile: true,
   hasTouch: true,
   deviceScaleFactor: 1, // software GL in CI; real phones have a GPU
@@ -107,6 +107,19 @@ try {
     return { res: r('.topbar .res'), date: r('.topbar .date'), tabs: r('.tabs'), vw: window.innerWidth };
   });
   console.log('top bar', bar);
+  const mapVisible = await page.evaluate(() => {
+    let open = 0;
+    let total = 0;
+    for (let fy = 0.2; fy <= 0.8; fy += 0.05) {
+      for (let fx = 0.15; fx <= 0.85; fx += 0.05) {
+        total++;
+        if (document.elementFromPoint(Math.round(window.innerWidth * fx), Math.round(window.innerHeight * fy))?.id === 'gl') open++;
+      }
+    }
+    return Math.round((open / total) * 100);
+  });
+  console.log('globe reachable', mapVisible + '% of the screen');
+  if (mapVisible < 45) fail(`panels cover the map: only ${mapVisible}% of the screen is globe`);
   if (!bar.res.visible || bar.res.w < 60) fail('the resource strip collapsed: ' + JSON.stringify(bar.res));
   if (bar.date.right > bar.vw + 1) fail('the date is pushed off the edge');
   if (bar.tabs.right > bar.vw + 1) fail('the tabs are pushed off the edge');
@@ -184,9 +197,23 @@ try {
       const b = e.getBoundingClientRect();
       return { onScreen: b.right <= window.innerWidth + 2 && b.bottom <= window.innerHeight + 2 && b.left >= -2 && b.top >= -2, w: Math.round(b.width) };
     };
+    // what share of the screen is free to aim with, and free to steer with
+    let look = 0;
+    let stick = 0;
+    let cells = 0;
+    for (let fy = 0.1; fy <= 0.92; fy += 0.04) {
+      for (let fx = 0.05; fx <= 0.95; fx += 0.04) {
+        cells++;
+        const e = document.elementFromPoint(Math.round(window.innerWidth * fx), Math.round(window.innerHeight * fy));
+        const c = e ? e.className.toString() : '';
+        if (c.includes('tc-look-zone')) look++;
+        if (c.includes('tc-stick-zone')) stick++;
+      }
+    }
     return {
       stickZone: hit(80, window.innerHeight - 80),
-      lookZone: hit(Math.round(window.innerWidth * 0.75), Math.round(window.innerHeight * 0.35)),
+      lookPct: Math.round((look / cells) * 100),
+      stickPct: Math.round((stick / cells) * 100),
       fire: r('.tc-fire'),
       sys: r('.tc-sys'),
       buttons: document.querySelectorAll('.tc-btn').length,
@@ -194,7 +221,8 @@ try {
   });
   console.log('control layout', layout);
   if (!layout.stickZone.includes('tc-stick-zone')) fail('thumbstick area is covered: ' + layout.stickZone);
-  if (!layout.lookZone.includes('tc-look-zone')) fail('look area is covered: ' + layout.lookZone);
+  if (layout.lookPct < 25) fail(`buttons crowd out the aiming area: only ${layout.lookPct}% of the screen is free to look with`);
+  if (layout.stickPct < 20) fail(`only ${layout.stickPct}% of the screen is free to steer with`);
   if (!layout.fire?.onScreen) fail('fire button is off screen');
   if (!layout.sys?.onScreen) fail('map/pause buttons are off screen');
 
@@ -207,10 +235,15 @@ try {
   });
   const stickPt = [Math.round(env.w * 0.22), Math.round(env.h - 60)];
   const lookPt = [Math.round(env.w * 0.6), Math.round(env.h * 0.3)];
-  const zones = await page.evaluate(([s, l]) => ({
-    stick: (document.elementFromPoint(s[0], s[1]) || {}).className || 'none',
-    look: (document.elementFromPoint(l[0], l[1]) || {}).className || 'none',
-  }), [stickPt, lookPt]);
+  const zones = await page.evaluate(([s, l]) => {
+    const id = (x, y) => {
+      const e = document.elementFromPoint(x, y);
+      if (!e) return 'none';
+      const b = e.getBoundingClientRect();
+      return `${e.tagName}.${e.className || '-'}[${e.textContent.trim().slice(0, 8)}] @${Math.round(b.left)},${Math.round(b.top)} ${Math.round(b.width)}x${Math.round(b.height)}`;
+    };
+    return { stick: id(s[0], s[1]), look: id(l[0], l[1]) };
+  }, [stickPt, lookPt]);
   console.log('drag targets', zones);
   if (!String(zones.stick).includes('tc-stick-zone')) fail('thumbstick point is blocked by ' + zones.stick);
   if (!String(zones.look).includes('tc-look-zone')) fail('look point is blocked by ' + zones.look);
@@ -294,6 +327,71 @@ try {
   if (!paused.pause) fail('pause button did not open the pause menu');
   if (!paused.touchHidden) fail('touch controls still visible while paused');
   await shot('10-paused');
+
+  // --- the whole way out: withdraw -> after-action report -> back to the war room
+  await page.tap('[data-act=withdraw]');
+  await page.waitForSelector('.report', { timeout: 20000 });
+  await page.waitForTimeout(800);
+  await shot('11-report');
+  const report = await page.evaluate(() => {
+    const btn = document.querySelector('.report .btn');
+    const b = btn.getBoundingClientRect();
+    const ov = document.querySelector('.report-overlay');
+    const at = document.elementFromPoint(Math.round(b.left + b.width / 2), Math.round(b.top + b.height / 2));
+    return {
+      onScreen: b.top >= 0 && b.bottom <= window.innerHeight + 1 && b.left >= 0 && b.right <= window.innerWidth + 1,
+      reachable: !!at && (at === btn || btn.contains(at) || btn === at.closest('.btn')),
+      overlayScrolls: getComputedStyle(ov).overflowY === 'auto',
+      deadShown: document.querySelector('.hud-dead').classList.contains('on'),
+    };
+  });
+  console.log('after-action report', report);
+  if (!report.onScreen) fail('the "return to the war room" button is off screen');
+  if (!report.reachable) fail('the report button is covered by something else');
+  if (!report.overlayScrolls) fail('the report overlay cannot scroll on a short screen');
+  if (report.deadShown) fail('the redeploy countdown is still showing behind the report');
+
+  await page.tap('.report .btn');
+  await page.waitForTimeout(3000);
+  const back = await page.evaluate(() => ({
+    screen: window.__gf.screen,
+    battleGone: !window.__gf.battle,
+    reportGone: !document.querySelector('.report-overlay'),
+    touchGone: !document.querySelector('.touch-ui'),
+    topbar: !!document.querySelector('[data-tab=research]'),
+    stratVisible: getComputedStyle(document.querySelector('.strat')).display !== 'none',
+  }));
+  console.log('back to war room', back);
+  if (back.screen !== 'strategy') fail('did not return to the strategy screen: ' + back.screen);
+  if (!back.battleGone) fail('the battle was not torn down');
+  if (!back.reportGone) fail('the report overlay is still on screen');
+  if (!back.touchGone) fail('the battle touch controls outlived the battle');
+  if (!back.topbar || !back.stratVisible) fail('the strategy interface did not come back');
+
+  // the globe must still answer a tap
+  await page.evaluate(() => window.__gf.stratUI.selectProvince(null));
+  await page.waitForTimeout(300);
+  const clearSpot = await page.evaluate(() => {
+    // a point that is both uncovered and actually on the planet, not empty space
+    for (let fy = 0.3; fy <= 0.75; fy += 0.05) {
+      for (let fx = 0.3; fx <= 0.7; fx += 0.05) {
+        const x = Math.round(window.innerWidth * fx);
+        const y = Math.round(window.innerHeight * fy);
+        if (document.elementFromPoint(x, y)?.id !== 'gl') continue;
+        const hit = window.__gf.globe.pickProvince((x / window.innerWidth) * 2 - 1, -(y / window.innerHeight) * 2 + 1);
+        if (hit) return { x, y };
+      }
+    }
+    return null;
+  });
+  if (!clearSpot) fail('no part of the globe is reachable: panels cover the whole screen');
+  else {
+    await page.touchscreen.tap(clearSpot.x, clearSpot.y);
+    await page.waitForTimeout(800);
+    const responsive = await page.evaluate(() => window.__gf.stratUI.selectedProvince !== null);
+    if (!responsive) fail(`the globe stopped responding to taps after the battle (tapped ${clearSpot.x},${clearSpot.y})`);
+  }
+  await shot('12-war-room');
   }
 } catch (e) {
   errors.push('script: ' + (e && e.message));
