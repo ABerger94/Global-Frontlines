@@ -77,7 +77,7 @@ The headless smoke test uses `playwright-core` and needs a Chromium binary. Set 
 * Top-right tabs: **Research** (three branches, four tiers), **Production** (split factory output
   between munitions, equipment and construction steel), **Diplomacy** (relations, alliances, war,
   truces) and **Armies**.
-* `Space` pauses, `1` `2` `3` set the speed.
+* `Space` pauses, `1` `2` `3` set the speed, `Esc` closes whatever panel is open.
 
 **Battle layer**
 

@@ -83,7 +83,7 @@ class App {
       } else if (e.code === 'Digit1') this.stratUI.setSpeed(1);
       else if (e.code === 'Digit2') this.stratUI.setSpeed(2);
       else if (e.code === 'Digit3') this.stratUI.setSpeed(3);
-      else if (e.code === 'Escape') this.stratUI.selectProvince(null);
+      else if (e.code === 'Escape') this.stratUI.closeTop();
     });
     this.resize();
     this.loop();

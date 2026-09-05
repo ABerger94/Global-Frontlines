@@ -47,6 +47,9 @@ export class StrategyUI {
   private logUnread = 0;
   private toastHost: HTMLElement;
   private pendingRefresh: number | null = null;
+  /** The panel currently under a held pointer, if any. */
+  private heldPanel: HTMLElement | null = null;
+  private refreshDeferred = false;
 
   constructor(readonly host: HTMLElement, readonly sim: StrategySim, readonly globe: GlobeScene, readonly cb: StrategyUICallbacks) {
     this.root = document.createElement('div');
@@ -80,6 +83,26 @@ export class StrategyUI {
     this.unsub.push(sim.events.on('log', (m, k) => this.log(m, k)));
     this.unsub.push(sim.events.on('dirty', () => this.scheduleRefresh()));
     this.unsub.push(sim.events.on('day', () => this.renderTopbar()));
+    // A panel rebuild between press and release destroys the element the click
+    // was meant for, so the click lands on nothing. Hold rebuilds while pressed.
+    const onDown = (e: PointerEvent) => {
+      this.heldPanel = (e.target as HTMLElement).closest('.panel, .log') as HTMLElement | null;
+    };
+    const onUp = () => {
+      if (!this.heldPanel) return;
+      this.heldPanel = null;
+      if (this.refreshDeferred) {
+        this.refreshDeferred = false;
+        this.scheduleRefresh();
+      }
+    };
+    this.root.addEventListener('pointerdown', onDown);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+    this.unsub.push(() => {
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+    });
     this.root.addEventListener('click', (e) => this.onClick(e));
     this.root.addEventListener('input', (e) => this.onInput(e));
     this.refresh();
@@ -112,13 +135,23 @@ export class StrategyUI {
   private renderInto(panel: HTMLElement, html: string, identity: string) {
     const body = panel.querySelector('.body') as HTMLElement | null;
     const same = panel.dataset.identity === identity;
-    // never yank a slider out from under the mouse
-    if (same && panel.contains(document.activeElement) && (document.activeElement as HTMLElement)?.tagName === 'INPUT') return;
+    // never yank a control out from under the pointer
+    if (same && (this.heldPanel === panel || (panel.contains(document.activeElement) && (document.activeElement as HTMLElement)?.tagName === 'INPUT'))) {
+      this.refreshDeferred = true;
+      return;
+    }
     const scroll = same && body ? body.scrollTop : 0;
     panel.innerHTML = html;
     panel.dataset.identity = identity;
     const next = panel.querySelector('.body') as HTMLElement | null;
     if (next && scroll) next.scrollTop = scroll;
+  }
+
+  /** Hide a panel and drop its contents, so nothing stale is left in the document. */
+  private hidePanel(panel: HTMLElement) {
+    panel.style.display = 'none';
+    if (panel.childElementCount) panel.innerHTML = '';
+    delete panel.dataset.identity;
   }
 
   refresh() {
@@ -157,7 +190,7 @@ export class StrategyUI {
 
   private renderProvince() {
     if (this.selectedProvince === null) {
-      this.provincePanel.style.display = 'none';
+      this.hidePanel(this.provincePanel);
       this.root.classList.remove('sheet-open');
       return;
     }
@@ -169,7 +202,7 @@ export class StrategyUI {
     const armies = this.sim.armiesIn(p.id);
     const moving = [...this.sim.armies.values()].filter((a) => a.path.length > 1 && a.province === p.id);
     const t = TERRAIN_INFO[p.terrain];
-    let html = `<h3><span style="width:12px;height:12px;border-radius:2px;display:inline-block;${flagStyle(owner)}"></span>${p.name}${p.capitalOf ? ' ★' : ''}<span class="close" data-act="closeProvince">×</span></h3><div class="body">`;
+    let html = `<h3><span style="width:12px;height:12px;border-radius:2px;display:inline-block;${flagStyle(owner)}"></span>${p.name}${p.capitalOf ? ' ★' : ''}<button type="button" class="close" aria-label="Close" title="Close (Esc)" data-act="closeProvince">×</button></h3><div class="body">`;
     if (p.isLand) {
       const rel = p.owner && p.owner !== 'minor' && p.owner !== player.id ? (player.wars.has(p.owner) ? ' <span class="st war">War</span>' : player.allies.has(p.owner) ? ' <span class="st ally">Ally</span>' : '') : '';
       html += `<div class="kv">
@@ -222,7 +255,7 @@ export class StrategyUI {
 
   private renderSide() {
     if (!this.activeTab) {
-      this.sidePanel.style.display = 'none';
+      this.hidePanel(this.sidePanel);
       this.root.classList.remove('tab-open');
       return;
     }
@@ -230,7 +263,7 @@ export class StrategyUI {
     let html = '';
     if (this.activeTab === 'research') {
       const avail = new Set(this.sim.availableTechs(n).map((t) => t.id));
-      html += `<h3>Research <span class="muted" style="font-weight:400;font-size:12px">${fmtNum(n.research)} pts stored · +${this.researchRate().toFixed(0)}/day</span><span class="close" data-act="closeTab">×</span></h3><div class="body"><div class="tech-grid">`;
+      html += `<h3>Research <span class="muted" style="font-weight:400;font-size:12px">${fmtNum(n.research)} pts stored · +${this.researchRate().toFixed(0)}/day</span><button type="button" class="close" aria-label="Close" title="Close (Esc)" data-act="closeTab">×</button></h3><div class="body"><div class="tech-grid">`;
       for (const branch of ['infantry', 'armor', 'industry'] as const) {
         const label = branch === 'infantry' ? 'Infantry' : branch === 'armor' ? (this.sim.era.id === 'modern' ? 'Drones & Armour' : 'Armour & Air') : 'Industry';
         html += `<div class="tech-col"><h4>${label}</h4>`;
@@ -250,7 +283,7 @@ export class StrategyUI {
       const factories = this.sim.provincesOf(n.id).reduce((a, p) => a + p.factories, 0);
       const out = factories * 4.2 * n.def.industry;
       const grade = (v: number) => (v >= 0.7 ? 'good' : v >= 0.35 ? 'warn' : 'bad');
-      html += `<h3>Production &amp; Logistics<span class="close" data-act="closeTab">×</span></h3><div class="body">
+      html += `<h3>Production &amp; Logistics<button type="button" class="close" aria-label="Close" title="Close (Esc)" data-act="closeTab">×</button></h3><div class="body">
         <p class="muted" style="margin:0 0 8px">${factories} factories · ${out.toFixed(1)} industrial output per day. Divide it between the three lines.</p>
         <div class="slider-row"><span>Munitions</span><input type="range" min="0" max="100" value="${Math.round(pr.munitions * 100)}" data-prod="munitions"><b>${Math.round(pr.munitions * 100)}%</b></div>
         <div class="slider-row"><span>Equipment</span><input type="range" min="0" max="100" value="${Math.round(pr.equipment * 100)}" data-prod="equipment"><b>${Math.round(pr.equipment * 100)}%</b></div>
@@ -272,7 +305,7 @@ export class StrategyUI {
         <div class="supply-line"><span>Infantry combat bonus</span><b class="good">+${Math.round(s.infantryBonus * 100)}%</b></div>
       </div>`;
     } else if (this.activeTab === 'diplomacy') {
-      html += `<h3>Diplomacy <span class="muted" style="font-weight:400;font-size:12px">${Math.round(n.pp)} political power</span><span class="close" data-act="closeTab">×</span></h3><div class="body">`;
+      html += `<h3>Diplomacy <span class="muted" style="font-weight:400;font-size:12px">${Math.round(n.pp)} political power</span><button type="button" class="close" aria-label="Close" title="Close (Esc)" data-act="closeTab">×</button></h3><div class="body">`;
       const others = [...this.sim.nations.values()].filter((o) => o.id !== n.id);
       others.sort((x, y) => Number(y.def.playable !== false) - Number(x.def.playable !== false) || this.sim.nationPower(y.id) - this.sim.nationPower(x.id));
       for (const o of others) {
@@ -295,7 +328,7 @@ export class StrategyUI {
       html += `<p class="muted" style="font-size:12px">Independent countries (muted colours, no listed government) can be invaded without a declaration at a cost of 3 stability per province.</p></div>`;
     } else if (this.activeTab === 'armies') {
       const armies = this.sim.armiesOf(n.id);
-      html += `<h3>Armies <span class="muted" style="font-weight:400;font-size:12px">${armies.length} field armies · ${fmtNum(armies.reduce((s, a) => s + a.men, 0))} men</span><span class="close" data-act="closeTab">×</span></h3><div class="body">`;
+      html += `<h3>Armies <span class="muted" style="font-weight:400;font-size:12px">${armies.length} field armies · ${fmtNum(armies.reduce((s, a) => s + a.men, 0))} men</span><button type="button" class="close" aria-label="Close" title="Close (Esc)" data-act="closeTab">×</button></h3><div class="body">`;
       if (!armies.length) html += '<p class="muted">No field armies. Raise one from a province you own.</p>';
       for (const a of armies) {
         const loc = this.sim.world.provinces[a.province].name;
@@ -421,6 +454,21 @@ export class StrategyUI {
       inp.value = String(Math.round(pr[k] * 100));
       (inp.nextElementSibling as HTMLElement).textContent = Math.round(pr[k] * 100) + '%';
     });
+  }
+
+  /** Close the topmost open panel. Returns false when there was nothing to close. */
+  closeTop(): boolean {
+    if (this.activeTab) {
+      this.activeTab = null;
+      this.renderSide();
+      this.renderTopbar();
+      return true;
+    }
+    if (this.selectedProvince !== null) {
+      this.selectProvince(null);
+      return true;
+    }
+    return false;
   }
 
   selectProvince(id: number | null) {

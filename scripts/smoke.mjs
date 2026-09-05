@@ -196,6 +196,43 @@ try {
   await clearPrompt();
   await shot('04d-army-list');
 
+  // --- the close button must be a real target and survive a redraw mid-click
+  await clearPrompt();
+  await page.click('[data-tab=diplomacy]');
+  await page.waitForTimeout(400);
+  const closeBox = await page.locator('.side-panel .close').boundingBox();
+  console.log('close button', closeBox && { w: Math.round(closeBox.width), h: Math.round(closeBox.height) });
+  if (!closeBox || closeBox.width < 26 || closeBox.height < 26) errors.push('the close button is too small to hit: ' + JSON.stringify(closeBox));
+  // press, force the panel to redraw while held, then release
+  await page.mouse.move(closeBox.x + closeBox.width / 2, closeBox.y + closeBox.height / 2);
+  await page.mouse.down();
+  // a redraw alone reproduces the race, without the side effects of advancing days
+  await page.evaluate(() => {
+    for (let i = 0; i < 4; i++) window.__gf.sim.events.emit('dirty');
+  });
+  await page.waitForTimeout(500);
+  const held = await page.evaluate(() => ({
+    survived: !!document.querySelector('.side-panel .close'),
+    blocked: !!document.querySelector('.modal-bg'),
+  }));
+  const survived = held.survived;
+  if (held.blocked) errors.push('a modal covered the panel during the close test');
+  await page.mouse.up();
+  await page.waitForTimeout(400);
+  const closedUnderRedraw = await page.evaluate(() => window.__gf.stratUI.activeTab === null);
+  console.log('close under redraw', { survived, closed: closedUnderRedraw });
+  if (!survived) errors.push('the close button was destroyed while the mouse was held on it');
+  if (!closedUnderRedraw) errors.push('clicking close failed because the panel redrew mid-click');
+  await clearPrompt();
+
+  // Esc closes whatever is on top
+  await page.click('[data-tab=armies]');
+  await page.waitForTimeout(300);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+  const escClosed = await page.evaluate(() => window.__gf.stratUI.activeTab === null);
+  if (!escClosed) errors.push('Escape did not close the open tab');
+
   // --- the war log collapses, remembers it, and never covers the side panel
   await page.click('[data-tab=research]');
   await page.waitForTimeout(300);
@@ -217,11 +254,15 @@ try {
   console.log('war log', logTest);
   const noise = await page.evaluate(async () => {
     const app = window.__gf;
-    for (let i = 0; i < 5; i++) app.stratUI.log('Empire of Japan\'s assault on Beijing is repulsed.', 'war');
+    document.querySelectorAll('.toast').forEach((t) => t.remove());
+    // a sentence the simulation never produces, so the count is unambiguous
+    const line = 'Quartermaster reports the ledgers are in order.';
+    for (let i = 0; i < 5; i++) app.stratUI.log(line, 'war');
     app.stratUI.log('A quiet day on the front.', 'info');
     await new Promise((r) => setTimeout(r, 100));
     const rows = [...document.querySelectorAll('.log .entry')].map((e) => e.textContent);
-    return { repeated: rows.filter((t) => t.includes('Beijing')).length, hasCount: rows.some((t) => t.includes('×5')), toasts: document.querySelectorAll('.toast').length };
+    const mine = rows.filter((t) => t.includes(line));
+    return { repeated: mine.length, hasCount: mine.some((t) => t.includes('\u00d75')), toasts: document.querySelectorAll('.toast').length };
   });
   console.log('log noise', noise);
   if (noise.repeated !== 1 || !noise.hasCount) errors.push('repeated reports were not collapsed: ' + JSON.stringify(noise));
