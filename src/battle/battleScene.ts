@@ -72,7 +72,7 @@ export class BattleScene {
   private squads: Squad[] = [];
   private tanks: Tank[] = [];
   private playerTank: Tank | null = null;
-  private tankCam = { yaw: 0, pitch: 0.2 };
+  private tankCam = { yaw: 0, pitch: -0.14 };
   private time = 0;
   private tickets: Record<Team, number>;
   private ticketsStart: Record<Team, number>;
@@ -440,10 +440,7 @@ export class BattleScene {
       this.playerTank = t;
       this.player.spawn(pos, yaw);
       this.player.controlEnabled = false;
-      this.mode = 'tank';
-      this.tankCam.yaw = t.yaw;
-      this.hud.setMode('tank');
-      this.touch?.setMode('tank');
+      this.enterTankView(t.yaw);
       this.hud.showMessage(this.setup.playerNation.tankName.toUpperCase(), 'W/S drive · A/D steer · LMB main gun · RMB coaxial MG', 4);
     } else {
       this.player.spawn(pos, yaw);
@@ -634,6 +631,16 @@ export class BattleScene {
   }
 
   // ---------------------------------------------------------------- modes
+  /** Take the camera off the player rig and hand it to the tank. */
+  private enterTankView(yaw: number, resetPitch = true) {
+    this.mode = 'tank';
+    this.tankCam.yaw = yaw;
+    if (resetPitch) this.tankCam.pitch = -0.14;
+    this.player.releaseCamera();
+    this.hud.setMode('tank');
+    this.touch?.setMode('tank');
+  }
+
   private enterCommander() {
     this.mode = 'commander';
     this.touch?.setMode('commander');
@@ -654,6 +661,7 @@ export class BattleScene {
       this.hud.setMode('fps');
     }
     this.hud.setMinimapVisible(true);
+    if (this.mode === 'tank') this.enterTankView(this.tankCam.yaw, false);
     this.touch?.setMode(this.mode === 'tank' ? 'tank' : 'fps');
     if (!device.touch) this.input.requestLock();
   }

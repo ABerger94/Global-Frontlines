@@ -65,9 +65,11 @@ class AudioEngine {
   private env(ctx: AudioContext, node: AudioNode, peak: number, attack: number, decay: number, dest: AudioNode, delay = 0) {
     const g = ctx.createGain();
     const t = ctx.currentTime + delay;
+    // exponential ramps reject zero, and a far-away source can compute exactly that
+    const target = Math.max(0.0002, peak);
     g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(peak, t + attack);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + attack + decay);
+    g.gain.exponentialRampToValueAtTime(target, t + Math.max(0.001, attack));
+    g.gain.exponentialRampToValueAtTime(0.0001, t + Math.max(0.001, attack) + Math.max(0.001, decay));
     node.connect(g).connect(dest);
     return g;
   }
@@ -82,7 +84,7 @@ class AudioEngine {
 
   gunshot(kind: FireSound, distance = 0, pan = 0) {
     const ctx = this.ensure();
-    if (!ctx) return;
+    if (!ctx || distance > 400) return;
     const { node, gain } = this.spatial(ctx, distance, pan);
     const far = Math.min(1, distance / 120);
     const cfg = {
@@ -104,7 +106,7 @@ class AudioEngine {
 
   explosion(distance = 0, pan = 0, size = 1) {
     const ctx = this.ensure();
-    if (!ctx) return;
+    if (!ctx || distance > 400) return;
     const { node, gain } = this.spatial(ctx, distance, pan);
     const boom = this.noise(ctx, 1.4 * size, 'lowpass', 160, 0.6);
     this.env(ctx, boom.out, 1.3 * gain * size, 0.01, 1.2 * size, node);
