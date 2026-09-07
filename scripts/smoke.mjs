@@ -196,6 +196,95 @@ try {
   await clearPrompt();
   await shot('04d-army-list');
 
+  // --- the Menu button opens a menu, it does not throw the campaign away
+  await clearPrompt();
+  await page.click('[data-act=menu]');
+  await page.waitForTimeout(400);
+  const menu = await page.evaluate(() => ({
+    open: !!document.querySelector('.game-menu'),
+    stillPlaying: window.__gf.screen === 'strategy' && !!window.__gf.sim,
+    paused: window.__gf.stratUI.speed === 0,
+    hasQuit: !!document.querySelector('[data-menu=quit]'),
+    hasResume: !!document.querySelector('[data-menu=resume]'),
+    hasDifficulty: document.querySelectorAll('[data-menu=diff]').length,
+    hasVolume: !!document.querySelector('[data-menu=volume]'),
+  }));
+  console.log('game menu', menu);
+  if (!menu.open) errors.push('the Menu button did not open a menu');
+  if (!menu.stillPlaying) errors.push('the Menu button abandoned the campaign with no confirmation');
+  if (!menu.paused) errors.push('opening the menu did not pause the campaign');
+  if (!menu.hasQuit || !menu.hasResume || menu.hasDifficulty !== 4 || !menu.hasVolume) errors.push('the menu is missing options: ' + JSON.stringify(menu));
+  await shot('04e-game-menu');
+
+  // quitting takes two deliberate steps
+  await page.click('[data-menu=quit]');
+  await page.waitForTimeout(300);
+  const confirming = await page.evaluate(() => ({
+    warned: !!document.querySelector('.quit-warning'),
+    stillPlaying: window.__gf.screen === 'strategy' && !!window.__gf.sim,
+    canCancel: !!document.querySelector('[data-menu=cancelQuit]'),
+  }));
+  await shot('04f-quit-confirm');
+  console.log('quit confirmation', confirming);
+  if (!confirming.warned) errors.push('quitting gave no warning that progress is lost');
+  if (!confirming.stillPlaying) errors.push('the first click on Quit already ended the campaign');
+  if (!confirming.canCancel) errors.push('there is no way to back out of quitting');
+  await page.click('[data-menu=cancelQuit]');
+  await page.waitForTimeout(300);
+
+  // resume restores the speed the player had set
+  await page.click('[data-menu=resume]');
+  await page.waitForTimeout(400);
+  const resumed = await page.evaluate(() => ({
+    closed: !document.querySelector('.game-menu'),
+    speed: window.__gf.stratUI.speed,
+    playing: window.__gf.screen === 'strategy',
+  }));
+  console.log('resume', resumed);
+  if (!resumed.closed) errors.push('Resume did not close the menu');
+  if (!resumed.playing) errors.push('Resume did not return to the campaign');
+  if (resumed.speed === 0) errors.push('Resume left the campaign paused');
+
+  // Esc opens the menu when nothing is open, and closes it again. Clear the
+  // board first: Esc closes an open panel before it reaches for the menu.
+  await clearPrompt();
+  await page.evaluate(() => {
+    const ui = window.__gf.stratUI;
+    ui.setSpeed(0);
+    while (ui.closeTop());
+  });
+  await page.waitForTimeout(250);
+  const clean = await page.evaluate(() => ({
+    menu: window.__gf.stratUI.isMenuOpen,
+    tab: window.__gf.stratUI.activeTab,
+    province: window.__gf.stratUI.selectedProvince,
+  }));
+  if (clean.menu || clean.tab || clean.province !== null) errors.push('could not reach a clean state before the Esc test: ' + JSON.stringify(clean));
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(350);
+  const escOpen = await page.evaluate(() => !!document.querySelector('.game-menu'));
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(350);
+  const escShut = await page.evaluate(() => !document.querySelector('.game-menu'));
+  console.log('esc menu', { escOpen, escShut });
+  if (!escOpen) errors.push('Escape did not open the game menu with nothing else open');
+  if (!escShut) errors.push('Escape did not close the game menu');
+
+  // and Esc must still prefer closing an open panel over opening the menu
+  await page.click('[data-tab=armies]');
+  await page.waitForTimeout(300);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(350);
+  const panelFirst = await page.evaluate(() => ({
+    tabClosed: window.__gf.stratUI.activeTab === null,
+    menuOpen: !!document.querySelector('.game-menu'),
+  }));
+  console.log('esc closes panels first', panelFirst);
+  if (!panelFirst.tabClosed) errors.push('Escape did not close the open tab');
+  if (panelFirst.menuOpen) errors.push('Escape opened the menu instead of just closing the panel');
+  await page.evaluate(() => window.__gf.stratUI.closeGameMenu());
+  await clearPrompt();
+
   // --- the close button must be a real target and survive a redraw mid-click
   await clearPrompt();
   await page.click('[data-tab=diplomacy]');
@@ -224,14 +313,6 @@ try {
   if (!survived) errors.push('the close button was destroyed while the mouse was held on it');
   if (!closedUnderRedraw) errors.push('clicking close failed because the panel redrew mid-click');
   await clearPrompt();
-
-  // Esc closes whatever is on top
-  await page.click('[data-tab=armies]');
-  await page.waitForTimeout(300);
-  await page.keyboard.press('Escape');
-  await page.waitForTimeout(300);
-  const escClosed = await page.evaluate(() => window.__gf.stratUI.activeTab === null);
-  if (!escClosed) errors.push('Escape did not close the open tab');
 
   // --- the war log collapses, remembers it, and never covers the side panel
   await page.click('[data-tab=research]');

@@ -586,3 +586,25 @@ kbd { font-family: var(--font-mono); background: rgba(255,255,255,0.1); border: 
   .tc-squad { top: 78px; }
   .tc-sys { top: 8px; }
 }
+
+/* ============================================================ in-game menu */
+.game-menu .menu-stats { grid-template-columns: repeat(3, 1fr); margin-top: 0; }
+.game-menu .menu-stats div { flex-direction: column; align-items: flex-start; justify-content: flex-start; gap: 2px; }
+.game-menu .menu-stats span { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; }
+.game-menu .menu-stats b { font-family: var(--font-display); font-size: 15px; }
+.game-menu .menu-stats b.bad { color: var(--danger); }
+.game-menu .menu-stats b.good { color: var(--text); }
+.menu-row { display: grid; grid-template-columns: 90px 1fr 52px; align-items: center; gap: 12px; }
+.menu-row input { width: 100%; accent-color: var(--accent); }
+.menu-row b { font-family: var(--font-mono); text-align: right; }
+.menu-controls { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--muted); }
+.menu-controls b { color: var(--text); display: inline-block; min-width: 62px; }
+.menu-foot.confirming { flex-wrap: wrap; justify-content: flex-end; }
+.quit-warning { flex: 1 1 100%; text-align: left; padding-bottom: 8px; }
+.quit-warning b { display: block; color: var(--danger); font-family: var(--font-display); font-size: 16px; letter-spacing: 0.04em; text-transform: uppercase; }
+.quit-warning span { color: var(--muted); font-size: 13px; }
+@media (max-width: 900px) {
+  .game-menu .menu-stats { grid-template-columns: 1fr 1fr; }
+  .game-menu .choice small { display: block; }
+  .menu-controls { font-size: 11px; }
+}

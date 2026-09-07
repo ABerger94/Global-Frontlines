@@ -11,7 +11,8 @@ import { device } from '../core/device';
 import { DIFFICULTIES, DEFAULT_DIFFICULTY } from '../battle/difficulty';
 
 export interface StrategyUICallbacks {
-  onMenu: () => void;
+  /** Abandon the campaign and return to the title screen. */
+  onQuit: () => void;
   onAutoResolve: (ctx: BattleContext) => void;
   onTakeCommand: (ctx: BattleContext, role: RoleId, kit: KitId, difficulty: string) => void;
 }
@@ -47,6 +48,8 @@ export class StrategyUI {
   private logUnread = 0;
   private toastHost: HTMLElement;
   private pendingRefresh: number | null = null;
+  private menuOpen = false;
+  private speedBeforeMenu = 1;
   /** The panel currently under a held pointer, if any. */
   private heldPanel: HTMLElement | null = null;
   private refreshDeferred = false;
@@ -403,7 +406,7 @@ export class StrategyUI {
         this.toggleLog();
         break;
       case 'menu':
-        this.cb.onMenu();
+        this.showGameMenu();
         break;
       case 'closeProvince':
         this.selectProvince(null);
@@ -458,6 +461,7 @@ export class StrategyUI {
 
   /** Close the topmost open panel. Returns false when there was nothing to close. */
   closeTop(): boolean {
+    if (this.closeGameMenu()) return true;
     if (this.activeTab) {
       this.activeTab = null;
       this.renderSide();
@@ -673,6 +677,122 @@ export class StrategyUI {
         this.cb.onTakeCommand(ctx, role, kit, difficulty);
       }
     });
+  }
+
+  /**
+   * The in-game menu. Opening it pauses the campaign; quitting requires a
+   * deliberate confirmation, because there is no save to come back to.
+   */
+  showGameMenu() {
+    if (this.menuOpen || this.sim.pendingBattle || this.sim.gameOver) return;
+    this.menuOpen = true;
+    this.speedBeforeMenu = this.speed || 1;
+    this.setSpeed(0);
+    const n = this.sim.player;
+    const sim = this.sim;
+    const owned = sim.provincesOf(n.id).length;
+    const armies = sim.armiesOf(n.id);
+    const wars = [...n.wars].map((w) => sim.nations.get(w)?.def.name).filter(Boolean);
+    const allies = [...n.allies].map((a) => sim.nations.get(a)?.def.name).filter(Boolean);
+    let difficulty = DEFAULT_DIFFICULTY;
+    try {
+      difficulty = localStorage.getItem('gf.difficulty') ?? DEFAULT_DIFFICULTY;
+    } catch {
+      /* private browsing */
+    }
+    const vol = Math.round(audio.getVolume() * 100);
+    const host = this.modalHost;
+    host.innerHTML = `<div class="modal-bg game-menu"><div class="modal">
+      <div class="head">
+        <small>Paused</small>
+        <h2>Game Menu</h2>
+        <p>${n.def.name} · ${sim.era.name} · ${sim.dateString()}</p>
+      </div>
+      <div class="content">
+        <div class="mods menu-stats">
+          <div><span>Provinces</span><b>${owned}</b></div>
+          <div><span>Field armies</span><b>${armies.length}</b></div>
+          <div><span>Manpower</span><b>${fmtNum(n.manpower)}</b></div>
+          <div><span>Stability</span><b class="${n.stability < 35 ? 'bad' : 'good'}">${Math.round(n.stability)}%</b></div>
+          <div><span>At war with</span><b>${wars.length ? wars.join(', ') : 'Nobody'}</b></div>
+          <div><span>Allies</span><b>${allies.length ? allies.join(', ') : 'None'}</b></div>
+        </div>
+        <div class="section-title">Combat difficulty <span class="muted" style="text-transform:none;letter-spacing:0">applies to your next battle</span></div>
+        <div class="roles diff">${DIFFICULTIES.map((d) => `<div class="choice ${d.id === difficulty ? 'on' : ''}" data-menu="diff" data-id="${d.id}"><b>${d.name}</b><small>${d.desc}</small></div>`).join('')}</div>
+        <div class="section-title">Sound</div>
+        <div class="menu-row"><label for="gf-vol">Volume</label><input id="gf-vol" type="range" min="0" max="100" value="${vol}" data-menu="volume"><b class="vol-label">${vol}%</b></div>
+        <div class="section-title">Controls</div>
+        <div class="menu-controls">
+          <div><b>Map</b> Drag to rotate · scroll or pinch to zoom · tap a province to inspect it</div>
+          <div><b>Armies</b> Select an army in the province panel, then choose a destination</div>
+          <div><b>Speed</b> <kbd>Space</kbd> pause · <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> speed · <kbd>Esc</kbd> close a panel or open this menu</div>
+          <div><b>Battle</b> <kbd>W A S D</kbd> move · <kbd>LMB</kbd> fire · <kbd>RMB</kbd> aim · <kbd>R</kbd> reload · <kbd>Tab</kbd> command map · <kbd>Esc</kbd> pause</div>
+        </div>
+      </div>
+      <div class="foot menu-foot">
+        <button type="button" class="btn danger" data-menu="quit">Quit to Main Menu</button>
+        <button type="button" class="btn primary big" data-menu="resume">Resume Campaign</button>
+      </div>
+    </div></div>`;
+    const modal = host.querySelector('.modal') as HTMLElement;
+    modal.addEventListener('input', (e) => {
+      const el = e.target as HTMLInputElement;
+      if (el.dataset.menu !== 'volume') return;
+      const v = Number(el.value);
+      audio.setVolume(v / 100);
+      const label = modal.querySelector('.vol-label');
+      if (label) label.textContent = `${v}%`;
+      try {
+        localStorage.setItem('gf.volume', String(v));
+      } catch {
+        /* private browsing */
+      }
+    });
+    modal.addEventListener('click', (e) => {
+      const el = (e.target as HTMLElement).closest('[data-menu]') as HTMLElement | null;
+      if (!el) return;
+      const act = el.dataset.menu;
+      if (act === 'volume') return;
+      audio.click();
+      if (act === 'diff') {
+        const id = el.dataset.id!;
+        try {
+          localStorage.setItem('gf.difficulty', id);
+        } catch {
+          /* private browsing */
+        }
+        modal.querySelectorAll('[data-menu=diff]').forEach((x) => x.classList.toggle('on', x === el));
+      } else if (act === 'resume') this.closeGameMenu();
+      else if (act === 'quit') {
+        // never leave a campaign on a single click
+        const foot = modal.querySelector('.menu-foot') as HTMLElement;
+        foot.className = 'foot menu-foot confirming';
+        foot.innerHTML = `<div class="quit-warning"><b>Quit this campaign?</b><span>There is no save. Your armies, research and territory will be lost.</span></div>
+          <button type="button" class="btn" data-menu="cancelQuit">Keep Playing</button>
+          <button type="button" class="btn danger" data-menu="confirmQuit">Quit &amp; Lose Progress</button>`;
+      } else if (act === 'cancelQuit') {
+        const foot = modal.querySelector('.menu-foot') as HTMLElement;
+        foot.className = 'foot menu-foot';
+        foot.innerHTML = `<button type="button" class="btn danger" data-menu="quit">Quit to Main Menu</button>
+          <button type="button" class="btn primary big" data-menu="resume">Resume Campaign</button>`;
+      } else if (act === 'confirmQuit') {
+        this.menuOpen = false;
+        host.innerHTML = '';
+        this.cb.onQuit();
+      }
+    });
+  }
+
+  closeGameMenu(): boolean {
+    if (!this.menuOpen) return false;
+    this.menuOpen = false;
+    this.modalHost.innerHTML = '';
+    this.setSpeed(this.speedBeforeMenu);
+    return true;
+  }
+
+  get isMenuOpen(): boolean {
+    return this.menuOpen;
   }
 
   showGameOver(won: boolean, reason: string, onMenu: () => void) {

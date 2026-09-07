@@ -77,7 +77,10 @@ The headless smoke test uses `playwright-core` and needs a Chromium binary. Set 
 * Top-right tabs: **Research** (three branches, four tiers), **Production** (split factory output
   between munitions, equipment and construction steel), **Diplomacy** (relations, alliances, war,
   truces) and **Armies**.
-* `Space` pauses, `1` `2` `3` set the speed, `Esc` closes whatever panel is open.
+* `Space` pauses, `1` `2` `3` set the speed. `Esc` closes an open panel, or opens the game menu when
+  nothing is open.
+* **Menu** pauses the campaign and opens the game menu: campaign summary, combat difficulty, volume, a
+  controls reference, and quitting. Quitting asks for confirmation, because there is no save.
 
 **Battle layer**
 

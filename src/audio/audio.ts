@@ -9,6 +9,7 @@ class AudioEngine {
   private ambNodes: AudioNode[] = [];
   private noiseBuffer: AudioBuffer | null = null;
   enabled = true;
+  private volume = 0.7;
 
   private ensure(): AudioContext | null {
     if (!this.enabled) return null;
@@ -20,7 +21,7 @@ class AudioEngine {
         return null;
       }
       this.master = this.ctx.createGain();
-      this.master.gain.value = 0.7;
+      this.master.gain.value = this.volume;
       const comp = this.ctx.createDynamicsCompressor();
       comp.threshold.value = -18;
       comp.ratio.value = 6;
@@ -44,8 +45,13 @@ class AudioEngine {
     this.ensure();
   }
 
+  getVolume(): number {
+    return this.volume;
+  }
+
   setVolume(v: number) {
-    if (this.master) this.master.gain.value = v;
+    this.volume = Math.max(0, Math.min(1, v));
+    if (this.master) this.master.gain.value = this.volume;
   }
 
   private noise(ctx: AudioContext, duration: number, filterType: BiquadFilterType, freq: number, q = 1): { src: AudioBufferSourceNode; out: AudioNode } {

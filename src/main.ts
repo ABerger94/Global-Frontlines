@@ -44,6 +44,12 @@ class App {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     applyDeviceClasses();
+    try {
+      const v = localStorage.getItem('gf.volume');
+      if (v !== null) audio.setVolume(Number(v) / 100);
+    } catch {
+      /* private browsing */
+    }
     this.buildOrientationHint();
     this.menu = new Menu(this.ui, (era, nation) => this.startCampaign(era, nation));
     setTimeout(() => this.buildMenuGlobe(), 30);
@@ -83,7 +89,9 @@ class App {
       } else if (e.code === 'Digit1') this.stratUI.setSpeed(1);
       else if (e.code === 'Digit2') this.stratUI.setSpeed(2);
       else if (e.code === 'Digit3') this.stratUI.setSpeed(3);
-      else if (e.code === 'Escape') this.stratUI.closeTop();
+      else if (e.code === 'Escape') {
+        if (!this.stratUI.closeTop()) this.stratUI.showGameMenu();
+      }
     });
     this.resize();
     this.loop();
@@ -150,7 +158,7 @@ class App {
       this.labels.innerHTML = '';
       this.globe = new GlobeScene(this.renderer, this.sim.world, this.sim, this.labels);
       this.stratUI = new StrategyUI(this.ui, this.sim, this.globe, {
-        onMenu: () => this.returnToMenu(),
+        onQuit: () => this.returnToMenu(),
         onAutoResolve: (ctx) => this.autoResolve(ctx),
         onTakeCommand: (ctx, role, kit, difficulty) => this.takeCommand(ctx, role, kit, difficulty),
       });
